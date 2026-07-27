@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>琉球大学医学部ゴルフ部 管理システム</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Firebase Compat SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- Firebase 初期化 ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyDoqNZRmnhlobhz2bS0bj0FLPJMD1Po094",
+      authDomain: "golf-schedule-35a65.firebaseapp.com",
+      projectId: "golf-schedule-35a65",
+      storageBucket: "golf-schedule-35a65.firebasestorage.app",
+      messagingSenderId: "131717536313",
+      appId: "1:131717536313:web:9be040468bd1bf961b4be8"
+    };
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+
+    const DAY_TYPES = [
+      { id: 'mon1', label: '月曜日 17:00-18:30', dayOfWeek: 1 },
+      { id: 'mon2', label: '月曜日 20:00-21:30', dayOfWeek: 1 },
+      { id: 'tue1', label: '火曜日 17:00-18:30', dayOfWeek: 2 },
+      { id: 'thu1', label: '木曜日 20:00-21:30', dayOfWeek: 4 },
+      { id: 'fri1', label: '金曜日 17:00-18:30', dayOfWeek: 5 },
+      { id: 'sat1', label: '土曜日 9:30-11:00', dayOfWeek: 6 },
+      { id: 'sat2', label: '土曜日 18:30-20:00', dayOfWeek: 6 }
+    ];
+
+    const generateEvents = () => {
+      const events = [];
+      let currentDate = new Date('2026-07-01');
+      const endDate = new Date('2026-08-31');
+
+      while (currentDate <= endDate) {
+        const dayOfWeek = currentDate.getDay();
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const monthStr = dateStr.substring(0, 7);
+
+        DAY_TYPES.forEach(dt => {
+          if (dt.dayOfWeek === dayOfWeek) {
+            const timeMatch = dt.label.match(/(\d{1,2}:\d{2})/);
+            const startTimeStr = timeMatch ? timeMatch[1] : '00:00';
+            const endTimeMatch = dt.label.match(/-(\d{1,2}:\d{2})/);
+            const endTimeStr = endTimeMatch ? endTimeMatch[1] : '23:59';
+            
+            const m = currentDate.getMonth() + 1;
+            const d = currentDate.getDate();
+            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+            const shortLabel = `${m}/${d}(${dayNames[dayOfWeek]}) ${startTimeStr}`;
+            const mmdd = `${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
+
+            events.push({
+              id: `evt_${mmdd}_${dt.id}`, 
+              typeId: dt.id,
+              label: shortLabel,
+              date: dateStr,
+              endTime: `${dateStr}T${endTimeStr}:00`,
+              month: monthStr
+            });
+          }
+        });
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      return events;
+    };
+
+    const SCHEDULE_EVENTS = generateEvents();
+    const PRACTICE_TYPES = ['ゴルフレンジ', 'ショートコース', 'ミドルコース', 'ロングコース', 'パークゴルフ'];
+
+    const generatePassword = () => {
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let pass = '';
+      for(let i=0; i<10; i++) pass += chars[Math.floor(Math.random() * chars.length)];
+      return pass;
+    };
+
+    function App() {
+      const [isFirebaseReady, setIsFirebaseReady] = useState(false);
+      const [firebaseError, setFirebaseError] = useState(null);
+
+      const [users, setUsers] = useState({});
+      const [attendance, setAttendance] = useState({});
+      const [votes, setVotes] = useState({});
+      const [holidays, setHolidays] = useState([]);
+      const [practices, setPractices] = useState({});
+      const [messages, setMessages] = useState([]);
+
+      const [currentUser, setCurrentUser] = useState(null);
+      const [activeTab, setActiveTab] = useState('attendance'); 
+      const [loginId, setLoginId] = useState('');
+      const [loginPass, setLoginPass] = useState('');
+      const [loginError, setLoginError] = useState('');
+
+      const [selectedVoteMonth, setSelectedVoteMonth] = useState('2026-08');
+      const [selectedVoteDay, setSelectedVoteDay] = useState(null);
+      const [showWarningModal, setShowWarningModal] = useState(false);
+      const [pendingVote, setPendingVote] = useState(null);
+
+      const [pracDate, setPracDate] = useState('2026-07-27');
+      const [pracType, setPracType] = useState('ゴルフレンジ');
+      const [pracDurationOption, setPracDurationOption] = useState('60');
+      const [pracDurationCustom, setPracDurationCustom] = useState('');
+      const [pracMessage, setPracMessage] = useState('');
+
+      const [expandedEvent, setExpandedEvent] = useState(null);
+      const [adminSelectedMonth, setAdminSelectedMonth] = useState('2026-07');
+      const [expandedMonths, setExpandedMonths] = useState({ '2026-07': false, '2026-08': true });
+      
+      const [newHoliStart, setNewHoliStart] = useState('');
+      const [newHoliEnd, setNewHoliEnd] = useState('');
+      const [newHoliLabel, setNewHoliLabel] = useState('');
+      const [newUserKana, setNewUserKana] = useState('');
+      const [newUserName, setNewUserName] = useState('');
+      const [adminNameInput, setAdminNameInput] = useState('');
+      const [newMsgTitle, setNewMsgTitle] = useState('');
+      const [newMsgContent, setNewMsgContent] = useState('');
+      const [showLoginMessages, setShowLoginMessages] = useState(false);
+
+      useEffect(() => {
+        const setupFirebase = async () => {
+          try {
+            const adminDoc = await db.collection('users').doc('カントク').get();
+            if (!adminDoc.exists) {
+              await db.collection('users').doc('カントク').set({ id: 'カントク', name: '監督(管理者)', password: 'admin', role: 'admin' });
+              await db.collection('users').doc('ヤマダタロウ').set({ id: 'ヤマダタロウ', name: '山田 太郎', password: 'pass', role: 'user' });
+              await db.collection('messages').doc('msg_init').set({ id: 'msg_init', date: '2026-07-27', title: 'システム稼働開始', content: 'クラウド連携システムが正常に起動しました！' });
+            }
+
+            db.collection('users').onSnapshot(snap => {
+              const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setUsers(d);
+            });
+            db.collection('attendance').onSnapshot(snap => {
+              const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setAttendance(d);
+            });
+            db.collection('votes').onSnapshot(snap => {
+              const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setVotes(d);
+            });
+            db.collection('holidays').onSnapshot(snap => {
+              const d = []; snap.forEach(doc => d.push(doc.data())); setHolidays(d.sort((a,b)=>a.start.localeCompare(b.start)));
+            });
+            db.collection('practices').onSnapshot(snap => {
+              const d = {}; snap.forEach(doc => d[doc.id] = doc.data().records || []); setPractices(d);
+            });
+            db.collection('messages').onSnapshot(snap => {
+              const d = []; snap.forEach(doc => d.push(doc.data())); setMessages(d.sort((a,b)=>b.id.localeCompare(a.id)));
+            });
+
+            setIsFirebaseReady(true);
+          } catch (error) {
+            console.error("Firebase Error: ", error);
+            setFirebaseError(error.message);
+          }
+        };
+
+        setupFirebase();
+      }, []);
+
+      useEffect(() => {
+        setTimeout(() => { if (window.lucide) window.lucide.createIcons(); }, 100);
+      }, [activeTab, currentUser, expandedMonths, expandedEvent, showLoginMessages, selectedVoteMonth]);
+
+      const isEventPast = (endTimeStr) => new Date(endTimeStr) < new Date('2026-07-27T10:23:16');
+      const isDateInHoliday = (dateStr) => holidays.some(h => dateStr >= h.start && dateStr <= h.end);
+      const isMandatoryEvent = (userId, event) => {
+        if (isDateInHoliday(event.date)) return false;
+        return votes[userId]?.[event.month] === event.typeId;
+      };
+      const isVoteRequiredForMonth = (monthStr) => monthStr === '2026-08';
+      const hasVotedForMonth = (userId, monthStr) => !!votes[userId]?.[monthStr];
+
+      const handleLogin = (e) => {
+        e.preventDefault();
+        setLoginError('');
+        const normalizedId = loginId.replace(/\s+/g, '');
+        const user = users[normalizedId];
+        if (user && user.password === loginPass) {
+          setCurrentUser(user);
+          if (user.role === 'admin') setAdminNameInput(user.name);
+          setActiveTab(user.role === 'admin' ? 'admin_data' : 'attendance');
+        } else {
+          setLoginError('IDまたはパスワードが間違っています');
+        }
+      };
+
+      const handleLogout = () => {
+        setCurrentUser(null);
+        setLoginId('');
+        setLoginPass('');
+        setActiveTab('attendance');
+      };
+
+      const attemptVote = (dayId) => {
+        setPendingVote(dayId);
+        if (dayId === 'tue1' || dayId === 'thu1') setShowWarningModal(true);
+        else finalizeVote(dayId);
+      };
+
+      const finalizeVote = async (dayId) => {
+        const finalDay = dayId || pendingVote;
+        await db.collection('votes').doc(currentUser.id).set({ [selectedVoteMonth]: finalDay }, { merge: true });
+        
+        const attDoc = await db.collection('attendance').doc(currentUser.id).get();
+        const userAtt = attDoc.exists ? attDoc.data() : {};
+        
+        SCHEDULE_EVENTS.forEach(event => {
+          if (event.month === selectedVoteMonth) {
+            if (event.typeId === finalDay) {
+              if (!isEventPast(event.endTime) && !isDateInHoliday(event.date)) {
+                if (!userAtt[event.id] || !userAtt[event.id].status) {
+                  userAtt[event.id] = { status: '出席', reason: '', isReasonSubmitted: false };
+                }
+              }
+            } else if (userAtt[event.id]?.status === '出席') {
+              userAtt[event.id] = { ...userAtt[event.id], status: null };
+            }
+          }
+        });
+        await db.collection('attendance').doc(currentUser.id).set(userAtt);
+        setShowWarningModal(false);
+        setPendingVote(null);
+      };
+
+      const toggleAttendance = async (eventId, targetStatus, isMandatory) => {
+        const attDoc = await db.collection('attendance').doc(currentUser.id).get();
+        const userAtt = attDoc.exists ? attDoc.data() : {};
+        const currentStatus = userAtt[eventId]?.status;
+        const newStatus = isMandatory ? targetStatus : (currentStatus === targetStatus ? null : targetStatus);
+        
+        await db.collection('attendance').doc(currentUser.id).set({
+          [eventId]: { 
+            ...userAtt[eventId], 
+            status: newStatus,
+            reason: newStatus === '欠席' ? (userAtt[eventId]?.reason || '') : '',
+            isReasonSubmitted: newStatus === '欠席' ? (userAtt[eventId]?.isReasonSubmitted || false) : false
+          }
+        }, { merge: true });
+      };
+
+      const saveReason = async (eventId, reasonText) => {
+        await db.collection('attendance').doc(currentUser.id).set({
+          [eventId]: { reason: reasonText, isReasonSubmitted: true }
+        }, { merge: true });
+      };
+
+      const editReason = async (eventId) => {
+        await db.collection('attendance').doc(currentUser.id).set({
+          [eventId]: { isReasonSubmitted: false }
+        }, { merge: true });
+      };
+
+      const handleRecordPractice = async (e) => {
+        e.preventDefault();
+        let duration = null;
+        if (pracType === 'ゴルフレンジ') {
+          duration = pracDurationOption === 'other' ? parseInt(pracDurationCustom, 10) : parseInt(pracDurationOption, 10);
+          if (!duration || isNaN(duration)) { setPracMessage('練習時間を入力してください'); return; }
+        }
+        const newPrac = { id: `prac_${Date.now()}`, date: pracDate, type: pracType, duration };
+        const pracDoc = await db.collection('practices').doc(currentUser.id).get();
+        const currentRecords = pracDoc.exists && pracDoc.data().records ? pracDoc.data().records : [];
+        await db.collection('practices').doc(currentUser.id).set({ records: [newPrac, ...currentRecords] });
+        setPracMessage('自主練を記録しました！');
+        setTimeout(() => setPracMessage(''), 3000);
+      };
+
+      const handleAddHoliday = async (e) => {
+        e.preventDefault();
+        if (newHoliStart && newHoliEnd && newHoliLabel) {
+          const hId = `h_${Date.now()}`;
+          await db.collection('holidays').doc(hId).set({ id: hId, start: newHoliStart, end: newHoliEnd, label: newHoliLabel });
+          setNewHoliStart(''); setNewHoliEnd(''); setNewHoliLabel('');
+        }
+      };
+      const handleDeleteHoliday = async (id) => { await db.collection('holidays').doc(id).delete(); };
+
+      const handleSendMessage = async (e) => {
+        e.preventDefault();
+        if (!newMsgTitle || !newMsgContent) return;
+        const msgId = `msg_${Date.now()}`;
+        const today = new Date('2026-07-27').toISOString().split('T')[0];
+        await db.collection('messages').doc(msgId).set({ id: msgId, date: today, title: newMsgTitle, content: newMsgContent });
+        setNewMsgTitle(''); setNewMsgContent('');
+      };
+      const handleDeleteMessage = async (id) => { await db.collection('messages').doc(id).delete(); };
+
+      const handleAddUser = async (e) => {
+        e.preventDefault();
+        if (newUserKana && newUserName) {
+          const newId = newUserKana.replace(/\s+/g, '');
+          const newPass = generatePassword();
+          await db.collection('users').doc(newId).set({ id: newId, name: newUserName, password: newPass, role: 'user' });
+          setNewUserKana(''); setNewUserName('');
+        }
+      };
+      const handleDeleteUser = async (id) => { await db.collection('users').doc(id).delete(); };
+
+      const handleUpdateAdminName = async (e) => {
+        e.preventDefault();
+        if (adminNameInput.trim()) {
+          await db.collection('users').doc('カントク').update({ name: adminNameInput });
+          if (currentUser.id === 'カントク') setCurrentUser(prev => ({ ...prev, name: adminNameInput }));
+        }
+      };
+
+      const eventsByMonth = SCHEDULE_EVENTS.reduce((acc, event) => {
+        if (!acc[event.month]) acc[event.month] = [];
+        acc[event.month].push(event);
+        return acc;
+      }, {});
+
+      if (firebaseError) {
+        return (
+          <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6">
+            <div className="bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full text-center">
+              <i data-lucide="alert-triangle" className="w-16 h-16 text-red-500 mx-auto mb-4"></i>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">データベースに接続できません</h2>
+              <p className="text-sm text-gray-600 mb-6 bg-red-50 p-4 rounded-lg border border-red-100 text-left font-mono break-all">{firebaseError}</p>
+              <button onClick={() => window.location.reload()} className="bg-emerald-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-emerald-700 w-full">再読み込みして再試行</button>
+            </div>
+          </div>
+        );
+      }
+
+      if (!isFirebaseReady) {
+        return (
+          <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+            <div className="text-emerald-600 font-bold animate-pulse text-lg">クラウドに接続中...</div>
+          </div>
+        );
+      }
+
+      if (!currentUser) {
+        return (
+          <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 relative">
+            <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 space-y-6">
+              <div className="text-center">
+                <div className="w-20 h-20 mx-auto mb-4 bg-emerald-50 rounded-full flex items-center justify-center shadow-inner">
+                  <i data-lucide="flag" className="w-10 h-10 text-emerald-600"></i>
+                </div>
+                <h1 className="text-2xl font-bold text-gray-900 leading-tight">琉球大学医学部<br/>ゴルフ部 管理システム</h1>
+              </div>
+
+              <button onClick={() => setShowLoginMessages(true)} className="w-full bg-amber-50 border border-amber-200 text-amber-700 font-bold py-3 rounded-xl hover:bg-amber-100 transition shadow-sm flex items-center justify-center gap-2">
+                <i data-lucide="bell" className="w-5 h-5"></i> 管理者からのお知らせ ({messages.length})
+              </button>
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                {loginError && <p className="text-red-500 text-sm font-bold text-center bg-red-50 py-2 rounded">{loginError}</p>}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 ml-1 mb-1 block">ログインID (カタカナ)</label>
+                  <input type="text" placeholder="例: ヤマダタロウ" required value={loginId} onChange={(e) => setLoginId(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl bg-gray-50"/>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 ml-1 mb-1 block">パスワード</label>
+                  <input type="password" placeholder="パスワード" required value={loginPass} onChange={(e) => setLoginPass(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl bg-gray-50"/>
+                </div>
+                <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-md">ログイン</button>
+              </form>
+              <div className="text-xs text-gray-400 text-center mt-4 border-t pt-4">
+                <p>管理者: カントク / admin</p>
+                <p>部員: ヤマダタロウ / pass</p>
+              </div>
+            </div>
+            {showLoginMessages && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto relative shadow-xl">
+                  <button onClick={() => setShowLoginMessages(false)} className="absolute top-4 right-4 text-gray-400 p-1">✕</button>
+                  <h2 className="text-xl font-bold mb-4 text-emerald-800 flex items-center gap-2"><i data-lucide="bell" className="w-5 h-5"></i> 管理者からのお知らせ</h2>
+                  <div className="space-y-4">
+                    {messages.map(msg => (
+                      <div key={msg.id} className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                        <div className="text-xs font-bold text-amber-600 mb-1">{msg.date}</div>
+                        <div className="font-bold text-gray-800 mb-2">{msg.title}</div>
+                        <div className="text-sm text-gray-700 whitespace-pre-wrap">{msg.content}</div>
+                      </div>
+                    ))}
+                    {messages.length === 0 && <p className="text-sm text-gray-500">お知らせはありません。</p>}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-gray-50 text-gray-800 font-sans pb-24">
+          <header className="bg-white shadow-sm sticky top-0 z-20 border-b-2 border-emerald-500">
+            <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-800">
+                <i data-lucide="flag" className="w-6 h-6 text-emerald-600"></i>
+                <h1 className="font-bold text-lg">ゴルフ部システム</h1>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setShowLoginMessages(true)} className="p-2 text-gray-500 hover:text-amber-500 relative">
+                  <i data-lucide="bell" className="w-5 h-5"></i>
+                  {messages.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>}
+                </button>
+                <div className="px-3 py-1.5 bg-gray-100 rounded-full text-sm font-medium text-gray-700">{currentUser.name}</div>
+                <button onClick={handleLogout} className="text-gray-500 hover:text-red-500 p-1">ログアウト</button>
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-3xl mx-auto px-4 py-6">
+            <div className="flex space-x-2 mb-8 bg-gray-200/50 p-1 rounded-xl">
+              {currentUser.role === 'admin' ? (
+                <>
+                  <button onClick={() => setActiveTab('admin_data')} className={`flex-1 py-2.5 px-4 rounded-lg font-medium text-sm ${activeTab === 'admin_data' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}>全体データ管理</button>
+                  <button onClick={() => setActiveTab('admin_users')} className={`flex-1 py-2.5 px-4 rounded-lg font-medium text-sm ${activeTab === 'admin_users' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}>ユーザー管理</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setActiveTab('attendance')} className={`flex-1 py-2.5 px-2 rounded-lg font-medium text-sm ${activeTab === 'attendance' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}>出欠</button>
+                  <button onClick={() => setActiveTab('voting')} className={`flex-1 py-2.5 px-2 rounded-lg font-medium text-sm ${activeTab === 'voting' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}>義務日</button>
+                  <button onClick={() => setActiveTab('practice')} className={`flex-1 py-2.5 px-2 rounded-lg font-medium text-sm ${activeTab === 'practice' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}>自主練</button>
+                </>
+              )}
+            </div>
+
+            {/* 部員：出欠画面 */}
+            {activeTab === 'attendance' && currentUser.role === 'user' && (
+              <div className="space-y-8">
+                {Object.keys(eventsByMonth).sort().map(monthStr => {
+                  const monthEvents = eventsByMonth[monthStr];
+                  const hasVoted = hasVotedForMonth(currentUser.id, monthStr);
+                  const isLocked = isVoteRequiredForMonth(monthStr) && !hasVoted;
+                  const votedDayObj = DAY_TYPES.find(d => d.id === votes[currentUser.id]?.[monthStr]);
+
+                  return (
+                    <div key={monthStr} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                      <div className="text-xl font-bold mb-4 border-b pb-2 text-emerald-800 flex justify-between items-center">
+                        <span>{monthStr.replace('-', '年')}月 出欠予定</span>
+                        {hasVoted && votedDayObj && (
+                          <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded font-bold">
+                            義務日: {votedDayObj.label.split(' ')[0]}
+                          </span>
+                        )}
+                      </div>
+
+                      {isLocked ? (
+                        <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-center">
+                          <p className="text-red-700 font-bold mb-4">この月の出欠を入力するには、先に義務日の申告が必要です。</p>
+                          <button onClick={() => setActiveTab('voting')} className="bg-red-600 text-white px-6 py-2 rounded-lg font-bold">義務日を投票する</button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {monthEvents.map(event => {
+                            const isMandatory = isMandatoryEvent(currentUser.id, event);
+                            const myAtt = attendance[currentUser.id]?.[event.id] || {};
+                            return (
+                              <div key={event.id} className={`p-3.5 rounded-xl border-2 ${isMandatory ? 'bg-yellow-50 border-yellow-400' : 'bg-white border-gray-100'}`}>
+                                <div className="flex justify-between items-center">
+                                  <div className="font-bold">{event.label} {isMandatory && <span className="text-xs bg-yellow-400 px-2 py-0.5 rounded text-yellow-900 ml-2">義務日</span>}</div>
+                                  <div className="flex gap-2">
+                                    {isMandatory ? (
+                                      <>
+                                        <button onClick={() => toggleAttendance(event.id, '出席', true)} className={`px-4 py-2 rounded text-sm font-bold ${myAtt.status === '出席' || !myAtt.status ? 'bg-green-600 text-white' : 'bg-gray-100'}`}>出席</button>
+                                        <button onClick={() => toggleAttendance(event.id, '欠席', true)} className={`px-4 py-2 rounded text-sm font-bold ${myAtt.status === '欠席' ? 'bg-red-600 text-white' : 'bg-gray-100'}`}>欠席</button>
+                                      </>
+                                    ) : (
+                                      <button onClick={() => toggleAttendance(event.id, '希望出席', false)} className={`px-4 py-2 rounded text-sm font-bold ${myAtt.status === '希望出席' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>希望参加</button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 部員：投票画面 */}
+            {activeTab === 'voting' && currentUser.role === 'user' && (
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <h2 className="text-xl font-bold text-emerald-800 mb-4">義務出席日の申告 (2026年 8月分)</h2>
+                <div className="grid gap-3 mb-6">
+                  {DAY_TYPES.map(day => {
+                    const votedUserIds = Object.keys(votes).filter(uid => users[uid]?.role === 'user' && votes[uid]?.[selectedVoteMonth] === day.id);
+                    const sortedVotedUsers = votedUserIds.sort((a,b)=>a.localeCompare(b)).map(uid => users[uid].name);
+
+                    return (
+                      <div key={day.id} className="flex flex-col gap-1">
+                        <button onClick={() => setSelectedVoteDay(day.id)} className={`p-4 rounded-xl border-2 text-left font-bold ${selectedVoteDay === day.id ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200'}`}>
+                          {day.label}
+                        </button>
+                        {sortedVotedUsers.length > 0 && (
+                          <div className="px-3 text-xs text-gray-500">
+                            <span className="font-bold text-gray-400 mr-1">投票済:</span>
+                            {sortedVotedUsers.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <button onClick={() => attemptVote(selectedVoteDay)} disabled={!selectedVoteDay} className="w-full py-4 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50">確定する</button>
+              </div>
+            )}
+
+            {/* 部員：自主練画面 */}
+            {activeTab === 'practice' && currentUser.role === 'user' && (
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <h2 className="text-lg font-bold text-emerald-800 mb-4">自主練を記録する</h2>
+                <form onSubmit={handleRecordPractice} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">日付</label>
+                    <input type="date" value={pracDate} onChange={e => setPracDate(e.target.value)} required className="w-full p-3 border rounded-xl bg-gray-50"/>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">練習種類</label>
+                    <select value={pracType} onChange={e => setPracType(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50">
+                      {PRACTICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  {pracType === 'ゴルフレンジ' && (
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 mb-1 block">時間（分）</label>
+                      <input type="number" placeholder="60" value={pracDurationOption} onChange={e => setPracDurationOption(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50"/>
+                    </div>
+                  )}
+                  {pracMessage && <p className="text-emerald-600 font-bold text-center">{pracMessage}</p>}
+                  <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl">記録保存</button>
+                </form>
+              </div>
+            )}
+
+            {/* 管理者：ユーザー管理 */}
+            {activeTab === 'admin_users' && currentUser.role === 'admin' && (
+              <div className="space-y-8">
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                  <h2 className="text-lg font-bold mb-4 text-emerald-700 border-b pb-2">ユーザー追加・管理</h2>
+                  <form onSubmit={handleAddUser} className="flex flex-col md:flex-row gap-2 mb-4">
+                    <input type="text" placeholder="名前 (例: 山田 太郎)" value={newUserName} onChange={e=>setNewUserName(e.target.value)} required className="flex-1 p-2 text-sm border rounded bg-gray-50"/>
+                    <input type="text" placeholder="フリガナ (例: ヤマダ タロウ)" value={newUserKana} onChange={e=>setNewUserKana(e.target.value)} required className="flex-1 p-2 text-sm border rounded bg-gray-50"/>
+                    <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded font-bold text-sm">追加 (自動生成)</button>
+                  </form>
+                  <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                    {Object.values(users).filter(u => u.role === 'user').sort((a,b)=>a.id.localeCompare(b.id)).map(u => (
+                      <div key={u.id} className="flex justify-between items-center bg-gray-50 p-2 px-3 rounded border border-gray-100 text-sm">
+                        <div>
+                          <span className="font-bold text-gray-700 mr-3">{u.name}</span>
+                          <span className="text-gray-500 text-xs">ID: {u.id} / Pass: <span className="font-mono bg-white px-1 border rounded">{u.password}</span></span>
+                        </div>
+                        <button onClick={() => handleDeleteUser(u.id)} className="text-red-400 hover:text-red-600 p-1 bg-white border rounded">削除</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                  <h2 className="text-lg font-bold mb-4 text-gray-700 border-b pb-2">管理者設定</h2>
+                  <form onSubmit={handleUpdateAdminName} className="flex flex-col md:flex-row gap-2">
+                    <input type="text" value={adminNameInput} onChange={e=>setAdminNameInput(e.target.value)} required className="flex-1 p-2 text-sm border rounded bg-gray-50"/>
+                    <button type="submit" className="bg-gray-800 text-white px-4 py-2 rounded font-bold text-sm">名称を変更する</button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* 管理者：全体データ */}
+            {activeTab === 'admin_data' && currentUser.role === 'admin' && (
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <h2 className="text-xl font-bold text-emerald-800 mb-4">全体データ管理</h2>
+                <div className="border-t pt-4">
+                  <h3 className="font-bold mb-2">全体お知らせ配信</h3>
+                  <form onSubmit={handleSendMessage} className="space-y-3 mb-4">
+                    <input type="text" placeholder="件名" value={newMsgTitle} onChange={e=>setNewMsgTitle(e.target.value)} required className="w-full p-2 text-sm border rounded bg-gray-50"/>
+                    <textarea placeholder="本文" value={newMsgContent} onChange={e=>setNewMsgContent(e.target.value)} required rows="3" className="w-full p-2 text-sm border rounded bg-gray-50"></textarea>
+                    <button type="submit" className="bg-amber-500 text-white px-4 py-2 rounded font-bold text-sm">配信する</button>
+                  </form>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {messages.map(msg => (
+                      <div key={msg.id} className="flex justify-between items-center bg-gray-50 p-2 rounded border text-sm">
+                        <span>[{msg.date}] <strong>{msg.title}</strong></span>
+                        <button onClick={() => handleDeleteMessage(msg.id)} className="text-red-400 p-1">削除</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
