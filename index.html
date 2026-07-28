@@ -819,15 +819,14 @@
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                     <h2 className="text-lg font-bold text-emerald-800 mb-4 flex items-center gap-2"><Icons.Activity className="w-5 h-5" />自主練を記録する</h2>
                                     <form onSubmit={handleRecordPractice} className="space-y-4">
-                                        {/* スマホで縦並びになるよう grid-cols-1 sm:grid-cols-2 に設定 */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 gap-4">
                                             <div>
                                                 <label className="text-xs font-bold text-gray-500 mb-1 block">日付</label>
-                                                <input type="date" required value={pracDate} onChange={e=>setPracDate(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 text-sm" />
+                                                <input type="date" required value={pracDate} onChange={e=>setPracDate(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
                                             </div>
                                             <div>
                                                 <label className="text-xs font-bold text-gray-500 mb-1 block">種類</label>
-                                                <select value={pracType} onChange={e=>setPracType(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 text-sm">
+                                                <select value={pracType} onChange={e=>setPracType(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
                                                     {PRACTICE_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                                                 </select>
                                             </div>
@@ -835,15 +834,15 @@
                                         {pracType === 'ゴルフレンジ' ? (
                                             <div>
                                                 <label className="text-xs font-bold text-gray-500 mb-1 block">時間（分）</label>
-                                                <select value={pracDurationOption} onChange={e=>setPracDurationOption(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 text-sm mb-2">
+                                                <select value={pracDurationOption} onChange={e=>setPracDurationOption(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl bg-gray-50 text-sm mb-2 outline-none focus:ring-2 focus:ring-emerald-500">
                                                     <option value="30">30分</option><option value="60">60分</option><option value="90">90分</option><option value="other">その他</option>
                                                 </select>
-                                                {pracDurationOption === 'other' && <input type="number" placeholder="分数を入力" required value={pracDurationCustom} onChange={e=>setPracDurationCustom(e.target.value)} className="w-full p-3 border rounded-xl text-sm" />}
+                                                {pracDurationOption === 'other' && <input type="number" placeholder="分数を入力" required value={pracDurationCustom} onChange={e=>setPracDurationCustom(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" />}
                                             </div>
                                         ) : (
                                             <div>
                                                 <label className="text-xs font-bold text-gray-500 mb-1 block">スコア（任意）</label>
-                                                <input type="number" placeholder="スコアを入力" value={pracScore} onChange={e=>setPracScore(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 text-sm" />
+                                                <input type="number" placeholder="スコアを入力" value={pracScore} onChange={e=>setPracScore(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
                                             </div>
                                         )}
                                         {pracMessage && <div className="text-sm font-bold text-emerald-600 text-center bg-emerald-50 p-2 rounded">{pracMessage}</div>}
