@@ -976,18 +976,29 @@
                                             {eventsByMonth[adminSelectedMonth]?.map(ev => {
                                                 const atts = []; const hopes = []; const abss = [];
                                                 Object.keys(users).filter(uid=>users[uid] && users[uid].role==='user').forEach(uid => {
-                                                    const s = attendance[uid]?.[ev.id]?.status;
+                                                    const attData = attendance[uid]?.[ev.id];
+                                                    const s = attData?.status;
                                                     if(s==='出席') atts.push(users[uid].name);
                                                     if(s==='希望出席') hopes.push(users[uid].name);
-                                                    if(s==='欠席') abss.push(users[uid].name);
+                                                    if(s==='欠席') abss.push({ name: users[uid].name, reason: attData?.reason || '' });
                                                 });
                                                 return (
                                                     <div key={ev.id} className="p-3 border rounded bg-gray-50 text-sm">
                                                         <div className="font-bold border-b pb-1 mb-2">{ev.label}</div>
-                                                        <div className="grid grid-cols-3 gap-2">
+                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                                             <div className="bg-white p-2 rounded border"><div className="text-green-700 font-bold text-xs mb-1">出席: {atts.length}</div><div className="text-[10px] text-gray-600">{atts.join(', ')}</div></div>
                                                             <div className="bg-white p-2 rounded border"><div className="text-blue-700 font-bold text-xs mb-1">希望: {hopes.length}</div><div className="text-[10px] text-gray-600">{hopes.join(', ')}</div></div>
-                                                            <div className="bg-white p-2 rounded border"><div className="text-red-700 font-bold text-xs mb-1">欠席: {abss.length}</div><div className="text-[10px] text-gray-600">{abss.join(', ')}</div></div>
+                                                            <div className="bg-white p-2 rounded border">
+                                                                <div className="text-red-700 font-bold text-xs mb-1">欠席: {abss.length}</div>
+                                                                <div className="text-[10px] text-gray-600 space-y-1 mt-1">
+                                                                    {abss.map((a, i) => (
+                                                                        <div key={i} className="border-b border-gray-100 last:border-0 pb-1 last:pb-0">
+                                                                            <span className="font-bold">{a.name}</span>
+                                                                            {a.reason && <span className="block text-gray-500 bg-gray-50 p-1 rounded mt-0.5 whitespace-pre-wrap">{a.reason}</span>}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )
