@@ -641,7 +641,7 @@
                                                             const isPast = isEventPast(event.endTime);
                                                             const isHoliday = isDateInHoliday(event.date);
                                                             const isMandatory = isMandatoryEvent(currentUser.id, event);
-                                                            const isExempt = votes[currentUser.id]?.[`${monthStr}_exempt`];
+                                                            const isExempt = !!votes[currentUser.id]?.[`${monthStr}_exempt`];
                                                             const needsReason = isMandatory && !isExempt;
                                                             const myAtt = attendance[currentUser.id]?.[event.id] || {};
 
@@ -730,7 +730,6 @@
                             </div>
                         )}
 
-                        {}
                         {activeTab === 'voting' && (
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                 <h2 className="text-xl font-bold text-emerald-800 mb-2">義務日の申告</h2>
@@ -744,7 +743,7 @@
                                         
                                         const votedUserIds = Object.keys(votes).filter(uid => users[uid] && users[uid].role === 'user' && votes[uid][selectedVoteMonth] === day.id);
                                         const sortedVotedUsers = votedUserIds.sort((a,b)=>a.localeCompare(b)).map(uid => {
-                                            const isUserExempt = votes[uid]?.[`${selectedVoteMonth}_exempt`];
+                                            const isUserExempt = !!votes[uid]?.[`${selectedVoteMonth}_exempt`];
                                             return users[uid].name + (isUserExempt ? '(免除)' : '');
                                         });
 
@@ -773,7 +772,7 @@
                                 {(() => {
                                     const isMonthStarted = new Date() >= new Date(`${selectedVoteMonth}-01T00:00:00`);
                                     const curVote = votes[currentUser.id]?.[selectedVoteMonth];
-                                    const curExempt = votes[currentUser.id]?.[`${selectedVoteMonth}_exempt`];
+                                    const curExempt = !!votes[currentUser.id]?.[`${selectedVoteMonth}_exempt`];
                                     const isUnchanged = curVote === selectedVoteDay && curExempt === isExemptChecked;
                                     
                                     return (
