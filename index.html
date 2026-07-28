@@ -93,7 +93,7 @@
             CalendarX2: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="10" y1="14" x2="14" y2="18"></line><line x1="14" y1="14" x2="10" y2="18"></line></svg>,
             MapPin: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>,
             PlusCircle: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>,
-            Trash2: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>,
+            Trash2: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>,
             Edit2: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>,
             Settings: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
             Send: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>,
@@ -116,12 +116,24 @@
 
         const generateEvents = (dTypes) => {
             const events = [];
-            let currentDate = new Date('2026-07-01');
-            const endDate = new Date('2026-08-31');
+            const now = new Date();
+            // 現在の2ヶ月前の1日
+            const startMonthDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+            // 来月の末日
+            const endMonthDate = new Date(now.getFullYear(), now.getMonth() + 2, 0); 
+
+            let currentDate = startMonthDate;
+            const endDate = endMonthDate;
+            
             while (currentDate <= endDate) {
                 const dayOfWeek = currentDate.getDay();
-                const dateStr = currentDate.toISOString().split('T')[0];
-                const monthStr = dateStr.substring(0, 7);
+                // タイムゾーンによるズレを防ぐための対応
+                const yyyy = currentDate.getFullYear();
+                const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
+                const dd = String(currentDate.getDate()).padStart(2, '0');
+                const dateStr = `${yyyy}-${mm}-${dd}`;
+                const monthStr = `${yyyy}-${mm}`;
+                
                 dTypes.forEach(dt => {
                     if (dt.dayOfWeek === dayOfWeek) {
                         let startTimeStr = '00:00';
@@ -154,6 +166,23 @@
         };
 
         const App = () => {
+            const { currentMonthStr, displayMonths, votingMonths, prev1MonthStr, prev2MonthStr, nextMonthStr } = useMemo(() => {
+                const now = new Date();
+                const getStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                const cur = getStr(now);
+                const nxt = getStr(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+                const p1 = getStr(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+                const p2 = getStr(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+                return {
+                    currentMonthStr: cur,
+                    nextMonthStr: nxt,
+                    prev1MonthStr: p1,
+                    prev2MonthStr: p2,
+                    displayMonths: [p2, p1, cur, nxt],
+                    votingMonths: [cur, nxt]
+                };
+            }, []);
+
             const [isFirebaseReady, setIsFirebaseReady] = useState(false);
             const [firebaseError, setFirebaseError] = useState('');
             const [currentUser, setCurrentUser] = useState(null);
@@ -180,7 +209,7 @@
             const [showPopupMessages, setShowPopupMessages] = useState(false);
             const [showAdvanceModal, setShowAdvanceModal] = useState(false);
             const [hasSeenPopup, setHasSeenPopup] = useState(false);
-            const [expandedMonths, setExpandedMonths] = useState({ '2026-07': false, '2026-08': true });
+            const [expandedMonths, setExpandedMonths] = useState({ [prev2MonthStr]: false, [prev1MonthStr]: false, [currentMonthStr]: true, [nextMonthStr]: false });
             const [expandedEvent, setExpandedEvent] = useState(null);
             const [expandedCustomEvent, setExpandedCustomEvent] = useState(null);
             const [isDailyAttExpanded, setIsDailyAttExpanded] = useState(false);
@@ -192,7 +221,7 @@
             const [editAdvAmount, setEditAdvAmount] = useState('');
 
             // Voting state
-            const [selectedVoteMonth, setSelectedVoteMonth] = useState('2026-08');
+            const [selectedVoteMonth, setSelectedVoteMonth] = useState(currentMonthStr);
             const [selectedVoteDay, setSelectedVoteDay] = useState(null);
             const [isExemptChecked, setIsExemptChecked] = useState(false);
             const [showWarningModal, setShowWarningModal] = useState(false);
@@ -206,7 +235,7 @@
             const [pracMessage, setPracMessage] = useState('');
 
             // Admin state
-            const [adminSelectedMonth, setAdminSelectedMonth] = useState('2026-08');
+            const [adminSelectedMonth, setAdminSelectedMonth] = useState(currentMonthStr);
             const [newHoliStart, setNewHoliStart] = useState('');
             const [newHoliEnd, setNewHoliEnd] = useState('');
             const [newHoliLabel, setNewHoliLabel] = useState('');
@@ -713,10 +742,12 @@
 
                         {activeTab === 'attendance' && (
                             <div className="space-y-6">
-                                {Object.keys(eventsByMonth).sort().map(monthStr => {
-                                    const mEvents = eventsByMonth[monthStr];
+                                {displayMonths.map(monthStr => {
+                                    const mEvents = eventsByMonth[monthStr] || [];
+                                    if (mEvents.length === 0) return null; // イベントが無い月は非表示
+
                                     const hasVoted = !!votes[currentUser.id]?.[monthStr];
-                                    const isLocked = monthStr === '2026-08' && !hasVoted;
+                                    const isLocked = votingMonths.includes(monthStr) && !hasVoted;
                                     const isExpanded = expandedMonths[monthStr];
 
                                     return (
@@ -730,7 +761,7 @@
                                                     <div className="p-6 bg-red-50 text-red-800 rounded-xl text-center font-bold border border-red-100 mt-4 shadow-inner">
                                                         <Icons.AlertCircle className="w-10 h-10 mx-auto mb-3 text-red-500" />
                                                         <p className="mb-4">先に「義務日」の申告を完了してください。</p>
-                                                        <button onClick={()=>setActiveTab('voting')} className="block w-full max-w-xs mx-auto bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition shadow-md">義務日を投票する</button>
+                                                        <button onClick={()=>{setActiveTab('voting'); setSelectedVoteMonth(monthStr); setSelectedVoteDay(null);}} className="block w-full max-w-xs mx-auto bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition shadow-md">義務日を投票する</button>
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-3 mt-4">
@@ -830,6 +861,14 @@
                         {activeTab === 'voting' && (
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                 <h2 className="text-xl font-bold text-emerald-800 mb-2 flex items-center gap-2"><Icons.Vote className="w-6 h-6" /> 義務日の申告</h2>
+                                
+                                <div className="flex gap-2 mb-4">
+                                    {votingMonths.map(m => (
+                                        <button key={m} onClick={() => {setSelectedVoteMonth(m); setSelectedVoteDay(null);}} className={`flex-1 py-2 rounded-xl font-bold text-sm transition ${selectedVoteMonth === m ? 'bg-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                            {m.replace('-','年')}月分
+                                        </button>
+                                    ))}
+                                </div>
                                 <p className="text-sm text-gray-600 mb-6 border-b pb-4 leading-relaxed">対象月 ({selectedVoteMonth.replace('-','年')}月) に週1回必ず参加する曜日を選んでください。<br/>※月ごとの固定となります。</p>
                                 
                                 <div className="space-y-3 mb-6">
@@ -1087,7 +1126,9 @@
                                     <h2 className="text-lg font-bold mb-4 flex justify-between items-center border-b pb-3 cursor-pointer hover:text-emerald-600 transition" onClick={()=>setIsDailyAttExpanded(!isDailyAttExpanded)}>
                                         <span className="flex items-center gap-2 text-emerald-700"><Icons.Calendar className="w-6 h-6" />日別出欠状況</span>
                                         <div className="flex items-center gap-3">
-                                            <select value={adminSelectedMonth} onChange={e=>{e.stopPropagation();setAdminSelectedMonth(e.target.value);}} className="text-sm border-2 border-emerald-200 bg-emerald-50 text-emerald-800 p-1.5 rounded-lg font-bold outline-none"><option value="2026-07">2026-07</option><option value="2026-08">2026-08</option></select>
+                                            <select value={adminSelectedMonth} onChange={e=>{e.stopPropagation();setAdminSelectedMonth(e.target.value);}} className="text-sm border-2 border-emerald-200 bg-emerald-50 text-emerald-800 p-1.5 rounded-lg font-bold outline-none">
+                                                {displayMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                                            </select>
                                             <div className="bg-gray-100 p-1 rounded-full">{isDailyAttExpanded ? <Icons.ChevronUp className="w-5 h-5 text-gray-600" /> : <Icons.ChevronDown className="w-5 h-5 text-gray-600" />}</div>
                                         </div>
                                     </h2>
@@ -1132,7 +1173,9 @@
                                     <h2 className="text-lg font-bold mb-4 flex justify-between items-center border-b pb-3 cursor-pointer hover:text-emerald-600 transition" onClick={()=>setIsMonthlyStatsExpanded(!isMonthlyStatsExpanded)}>
                                         <span className="flex items-center gap-2 text-emerald-700"><Icons.BarChart2 className="w-6 h-6" />月間活動集計＆ベストスコア</span>
                                         <div className="flex items-center gap-3">
-                                            <select value={adminSelectedMonth} onChange={e=>{e.stopPropagation();setAdminSelectedMonth(e.target.value);}} className="text-sm border-2 border-emerald-200 bg-emerald-50 text-emerald-800 p-1.5 rounded-lg font-bold outline-none"><option value="2026-07">2026-07</option><option value="2026-08">2026-08</option></select>
+                                            <select value={adminSelectedMonth} onChange={e=>{e.stopPropagation();setAdminSelectedMonth(e.target.value);}} className="text-sm border-2 border-emerald-200 bg-emerald-50 text-emerald-800 p-1.5 rounded-lg font-bold outline-none">
+                                                {displayMonths.map(m => <option key={m} value={m}>{m}</option>)}
+                                            </select>
                                             <div className="bg-gray-100 p-1 rounded-full">{isMonthlyStatsExpanded ? <Icons.ChevronUp className="w-5 h-5 text-gray-600" /> : <Icons.ChevronDown className="w-5 h-5 text-gray-600" />}</div>
                                         </div>
                                     </h2>
@@ -1359,3 +1402,4 @@
     </script>
 </body>
 </html>
+
