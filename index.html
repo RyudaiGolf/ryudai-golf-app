@@ -2,33 +2,49 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ゴルフ部スケジュール管理</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React & ReactDOM -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <!-- Babel -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { emerald: { 50: '#ecfdf5', 100: '#d1fae5', 200: '#a7f3d0', 300: '#6ee7b7', 400: '#34d399', 500: '#10b981', 600: '#059669', 700: '#047857', 800: '#065f46', 900: '#064e3b' } }
+                }
+            }
+        }
+    </script>
+    <!-- Babel for in-browser JSX compilation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Firebase SDK (v10 compat) -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Custom modal animation */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-overlay { animation: fadeIn 0.2s ease-out forwards; }
+        .modal-content { animation: slideUp 0.3s ease-out forwards; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
     <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo, useRef } from 'https://esm.sh/react@18';
+        import { createRoot } from 'https://esm.sh/react-dom@18/client';
+        
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = {
+        const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'golf-schedule-app';
+        const defaultConfig = {
             apiKey: "AIzaSyDoqNZRmnhlobhz2bS0bj0FLPJMD1Po094",
             authDomain: "golf-schedule-35a65.firebaseapp.com",
             projectId: "golf-schedule-35a65",
@@ -36,12 +52,17 @@
             messagingSenderId: "131717536313",
             appId: "1:131717536313:web:9be040468bd1bf961b4be8"
         };
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.firestore();
+        const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? JSON.parse(window.__firebase_config) : defaultConfig;
 
-        // DOM競合エラーを防ぐための安全なSVGアイコンコンポーネント
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Required Path Helpers
+        const getColPath = (colName) => `artifacts/${appId}/public/data/${colName}`;
+        const getDocRef = (colName, docId) => doc(db, getColPath(colName), docId);
+        const getColRef = (colName) => collection(db, getColPath(colName));
+
         const Icons = {
             Flag: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>,
             Banknote: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2"></circle><path d="M6 12h.01M18 12h.01"></path></svg>,
@@ -85,6 +106,7 @@
 
         const generateEvents = (dTypes) => {
             const events = [];
+            // Target months based on original requirement
             let currentDate = new Date('2026-07-01');
             const endDate = new Date('2026-08-31');
             while (currentDate <= endDate) {
@@ -130,7 +152,7 @@
             const [loginPass, setLoginPass] = useState('');
             const [loginError, setLoginError] = useState('');
 
-            // クラウドデータ
+            // Cloud Data
             const [users, setUsers] = useState({});
             const [attendance, setAttendance] = useState({});
             const [votes, setVotes] = useState({});
@@ -143,7 +165,7 @@
             const [scheduleEvents, setScheduleEvents] = useState([]);
             const [advances, setAdvances] = useState([]);
 
-            // UIステート
+            // UI States
             const [showLoginMessages, setShowLoginMessages] = useState(false);
             const [showPopupMessages, setShowPopupMessages] = useState(false);
             const [showAdvanceModal, setShowAdvanceModal] = useState(false);
@@ -154,18 +176,18 @@
             const [isDailyAttExpanded, setIsDailyAttExpanded] = useState(false);
             const [isMonthlyStatsExpanded, setIsMonthlyStatsExpanded] = useState(false);
 
-            // 建て替え編集用
+            // Advance edit state
             const [editingAdvanceId, setEditingAdvanceId] = useState(null);
             const [editAdvHeadcount, setEditAdvHeadcount] = useState('');
             const [editAdvAmount, setEditAdvAmount] = useState('');
 
-            // 投票関連
+            // Voting state
             const [selectedVoteMonth, setSelectedVoteMonth] = useState('2026-08');
             const [selectedVoteDay, setSelectedVoteDay] = useState(null);
             const [isExemptChecked, setIsExemptChecked] = useState(false);
             const [showWarningModal, setShowWarningModal] = useState(false);
 
-            // 自主練関連
+            // Practice state
             const [pracDate, setPracDate] = useState(new Date().toISOString().split('T')[0]);
             const [pracType, setPracType] = useState('ゴルフレンジ');
             const [pracDurationOption, setPracDurationOption] = useState('60');
@@ -173,7 +195,7 @@
             const [pracScore, setPracScore] = useState('');
             const [pracMessage, setPracMessage] = useState('');
 
-            // 管理者関連
+            // Admin state
             const [adminSelectedMonth, setAdminSelectedMonth] = useState('2026-08');
             const [newHoliStart, setNewHoliStart] = useState('');
             const [newHoliEnd, setNewHoliEnd] = useState('');
@@ -188,77 +210,103 @@
             const [editUserName, setEditUserName] = useState('');
             const [editUserPass, setEditUserPass] = useState('');
             
-            // 特別イベント関連
+            // Custom event state
             const [newEventTitle, setNewEventTitle] = useState('');
             const [newEventDate, setNewEventDate] = useState('');
             const [newEventTime, setNewEventTime] = useState('');
             const [newEventLoc, setNewEventLoc] = useState('');
             const [newEventDesc, setNewEventDesc] = useState('');
 
-            // 建て替え記録関連
+            // Advance form state
             const [advEventId, setAdvEventId] = useState('');
             const [advHeadcount, setAdvHeadcount] = useState('');
             const [advAmount, setAdvAmount] = useState('');
 
-            // 練習枠追加関連
+            // Day type form state
             const [newDayLabel, setNewDayLabel] = useState('');
             const [newDayOfWeek, setNewDayOfWeek] = useState('1');
             const [newDayIsVoteable, setNewDayIsVoteable] = useState(true);
 
             useEffect(() => {
-                let unsubs = [];
                 const setupFirebase = async () => {
                     try {
-                        const adminDoc = await db.collection('users').doc('カントク').get();
-                        if (!adminDoc.exists) {
-                            await db.collection('users').doc('カントク').set({ id: 'カントク', name: '監督(管理者)', password: 'admin', role: 'admin' });
-                            await db.collection('users').doc('ヤマダタロウ').set({ id: 'ヤマダタロウ', name: '山田 太郎', password: 'pass', role: 'user' });
+                        let userCredential;
+                        if (typeof window.__initial_auth_token !== 'undefined') {
+                            userCredential = await signInWithCustomToken(auth, window.__initial_auth_token);
+                        } else {
+                            userCredential = await signInAnonymously(auth);
                         }
+                        
+                        if (!userCredential.user) return;
 
-                        unsubs.push(db.collection('settings').doc('dayTypes').onSnapshot(doc => {
-                            if (doc.exists) {
-                                setDayTypes(doc.data().list || DEFAULT_DAY_TYPES);
-                            } else {
-                                db.collection('settings').doc('dayTypes').set({ list: DEFAULT_DAY_TYPES });
-                            }
-                        }));
-
-                        unsubs.push(db.collection('users').onSnapshot(snap => {
-                            const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setUsers(d);
-                        }));
-                        unsubs.push(db.collection('attendance').onSnapshot(snap => {
-                            const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setAttendance(d);
-                        }));
-                        unsubs.push(db.collection('votes').onSnapshot(snap => {
-                            const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setVotes(d);
-                        }));
-                        unsubs.push(db.collection('holidays').onSnapshot(snap => {
-                            const d = []; snap.forEach(doc => d.push(doc.data())); setHolidays(d.sort((a,b)=>a.start.localeCompare(b.start)));
-                        }));
-                        unsubs.push(db.collection('practices').onSnapshot(snap => {
-                            const d = {}; snap.forEach(doc => d[doc.id] = doc.data().records || []); setPractices(d);
-                        }));
-                        unsubs.push(db.collection('messages').onSnapshot(snap => {
-                            const d = []; snap.forEach(doc => d.push(doc.data())); setMessages(d.sort((a,b)=>b.id.localeCompare(a.id)));
-                        }));
-                        unsubs.push(db.collection('custom_events').onSnapshot(snap => {
-                            const d = []; snap.forEach(doc => d.push(doc.data())); setCustomEvents(d.sort((a,b)=>a.date.localeCompare(b.date)));
-                        }));
-                        unsubs.push(db.collection('event_attendance').onSnapshot(snap => {
-                            const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setEventAttendance(d);
-                        }));
-                        unsubs.push(db.collection('advances').onSnapshot(snap => {
-                            const d = []; snap.forEach(doc => d.push(doc.data())); setAdvances(d.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)));
-                        }));
-
+                        // Initial check for Admin user
+                        const adminDocRef = getDocRef('users', 'カントク');
+                        const adminDoc = await getDoc(adminDocRef);
+                        
+                        if (!adminDoc.exists()) {
+                            await setDoc(adminDocRef, { id: 'カントク', name: '監督(管理者)', password: 'admin', role: 'admin' });
+                            await setDoc(getDocRef('users', 'ヤマダタロウ'), { id: 'ヤマダタロウ', name: '山田 太郎', password: 'pass', role: 'user' });
+                        }
+                        
                         setIsFirebaseReady(true);
                     } catch (error) {
-                        console.error(error);
+                        console.error("Firebase setup error:", error);
                     }
                 };
                 setupFirebase();
-                return () => unsubs.forEach(unsub => unsub());
             }, []);
+
+            useEffect(() => {
+                if (!isFirebaseReady) return;
+
+                const unsubs = [];
+                const errHandler = (err) => console.error("Snapshot error:", err);
+
+                // Settings
+                unsubs.push(onSnapshot(getDocRef('settings', 'dayTypes'), (docSnap) => {
+                    if (docSnap.exists()) {
+                        setDayTypes(docSnap.data().list || DEFAULT_DAY_TYPES);
+                    } else {
+                        setDoc(getDocRef('settings', 'dayTypes'), { list: DEFAULT_DAY_TYPES });
+                    }
+                }, errHandler));
+
+                // Read all data regardless of login status (for login messages)
+                unsubs.push(onSnapshot(getColRef('messages'), (snap) => {
+                    const d = []; snap.forEach(doc => d.push(doc.data())); setMessages(d.sort((a,b)=>b.id.localeCompare(a.id)));
+                }, errHandler));
+
+                unsubs.push(onSnapshot(getColRef('users'), (snap) => {
+                    const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setUsers(d);
+                }, errHandler));
+
+                // If user is logged in, listen to the rest of the app data
+                if (currentUser) {
+                    unsubs.push(onSnapshot(getColRef('attendance'), (snap) => {
+                        const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setAttendance(d);
+                    }, errHandler));
+                    unsubs.push(onSnapshot(getColRef('votes'), (snap) => {
+                        const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setVotes(d);
+                    }, errHandler));
+                    unsubs.push(onSnapshot(getColRef('holidays'), (snap) => {
+                        const d = []; snap.forEach(doc => d.push(doc.data())); setHolidays(d.sort((a,b)=>a.start.localeCompare(b.start)));
+                    }, errHandler));
+                    unsubs.push(onSnapshot(getColRef('practices'), (snap) => {
+                        const d = {}; snap.forEach(doc => d[doc.id] = doc.data().records || []); setPractices(d);
+                    }, errHandler));
+                    unsubs.push(onSnapshot(getColRef('custom_events'), (snap) => {
+                        const d = []; snap.forEach(doc => d.push(doc.data())); setCustomEvents(d.sort((a,b)=>a.date.localeCompare(b.date)));
+                    }, errHandler));
+                    unsubs.push(onSnapshot(getColRef('event_attendance'), (snap) => {
+                        const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setEventAttendance(d);
+                    }, errHandler));
+                    unsubs.push(onSnapshot(getColRef('advances'), (snap) => {
+                        const d = []; snap.forEach(doc => d.push(doc.data())); setAdvances(d.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)));
+                    }, errHandler));
+                }
+
+                return () => unsubs.forEach(unsub => unsub());
+            }, [isFirebaseReady, currentUser]);
 
             useEffect(() => {
                 setScheduleEvents(generateEvents(dayTypes));
@@ -287,7 +335,6 @@
                     setCurrentUser(user);
                     setActiveTab(user.role === 'admin' ? 'admin_data' : 'events');
                     
-                    // 管理者の場合はお知らせポップアップを表示しない
                     if (user.role !== 'admin') {
                         const popupMsgs = messages.filter(m => m.showOnPopup);
                         if (popupMsgs.length > 0 && !hasSeenPopup) {
@@ -301,14 +348,15 @@
             };
 
             const finalizeVote = async () => {
-                await db.collection('votes').doc(currentUser.id).set({ 
+                if (!auth.currentUser) return;
+                await setDoc(getDocRef('votes', currentUser.id), { 
                     [selectedVoteMonth]: selectedVoteDay,
                     [`${selectedVoteMonth}_exempt`]: isExemptChecked
                 }, { merge: true });
                 
-                const userAttRef = db.collection('attendance').doc(currentUser.id);
-                const attDoc = await userAttRef.get();
-                const userAtt = attDoc.exists ? attDoc.data() : {};
+                const userAttRef = getDocRef('attendance', currentUser.id);
+                const attDoc = await getDoc(userAttRef);
+                const userAtt = attDoc.exists() ? attDoc.data() : {};
                 
                 scheduleEvents.forEach(event => {
                     if (event.month === selectedVoteMonth) {
@@ -323,18 +371,19 @@
                         }
                     }
                 });
-                await userAttRef.set(userAtt);
+                await setDoc(userAttRef, userAtt, { merge: true });
                 setShowWarningModal(false);
             };
 
             const toggleAttendance = async (eventId, targetStatus, isMandatory) => {
-                const attRef = db.collection('attendance').doc(currentUser.id);
-                const docSnap = await attRef.get();
-                const userAtt = docSnap.exists ? docSnap.data() : {};
+                if (!auth.currentUser) return;
+                const attRef = getDocRef('attendance', currentUser.id);
+                const docSnap = await getDoc(attRef);
+                const userAtt = docSnap.exists() ? docSnap.data() : {};
                 const currentStatus = userAtt[eventId]?.status;
                 const newStatus = (isMandatory) ? targetStatus : (currentStatus === targetStatus ? null : targetStatus);
                 
-                await attRef.set({
+                await setDoc(attRef, {
                     [eventId]: { 
                         ...userAtt[eventId], status: newStatus,
                         reason: newStatus === '欠席' ? (userAtt[eventId]?.reason || '') : '',
@@ -344,12 +393,14 @@
             };
 
             const toggleEventAttendance = async (eventId, status) => {
-                const ref = db.collection('event_attendance').doc(currentUser.id);
-                await ref.set({ [eventId]: { status } }, { merge: true });
+                if (!auth.currentUser) return;
+                const ref = getDocRef('event_attendance', currentUser.id);
+                await setDoc(ref, { [eventId]: { status } }, { merge: true });
             };
 
             const handleRecordPractice = async (e) => {
                 e.preventDefault();
+                if (!auth.currentUser) return;
                 let duration = null; let scoreVal = null;
                 
                 if (pracType === 'ゴルフレンジ') {
@@ -359,11 +410,11 @@
                 }
                 
                 const newPrac = { id: `prac_${Date.now()}`, date: pracDate, type: pracType, duration, score: scoreVal };
-                const ref = db.collection('practices').doc(currentUser.id);
-                const docSnap = await ref.get();
-                const records = docSnap.exists && docSnap.data().records ? docSnap.data().records : [];
+                const ref = getDocRef('practices', currentUser.id);
+                const docSnap = await getDoc(ref);
+                const records = docSnap.exists() && docSnap.data().records ? docSnap.data().records : [];
                 
-                await ref.set({ records: [newPrac, ...records] });
+                await setDoc(ref, { records: [newPrac, ...records] }, { merge: true });
                 setPracScore(''); setPracDurationCustom('');
                 setPracMessage('記録しました！');
                 setTimeout(() => setPracMessage(''), 3000);
@@ -371,22 +422,23 @@
 
             const handleUpdateUser = async (e) => {
                 e.preventDefault();
+                if (!auth.currentUser) return;
                 if (editingUser && editUserName && editUserPass) {
-                    await db.collection('users').doc(editingUser.id).update({ name: editUserName, password: editUserPass });
+                    await updateDoc(getDocRef('users', editingUser.id), { name: editUserName, password: editUserPass });
                     setEditingUser(null);
                 }
             };
 
             const handleRecordAdvance = async (e) => {
                 e.preventDefault();
-                if (!advEventId || !advHeadcount || !advAmount) return;
+                if (!auth.currentUser || !advEventId || !advHeadcount || !advAmount) return;
                 const id = `adv_${Date.now()}`;
                 
                 const allEvts = [...scheduleEvents, ...customEvents];
                 const selectedEvt = allEvts.find(evt => evt.id === advEventId);
                 const eventLabel = selectedEvt ? (selectedEvt.label || selectedEvt.title) : advEventId;
 
-                await db.collection('advances').doc(id).set({
+                await setDoc(getDocRef('advances', id), {
                     id,
                     userId: currentUser.id,
                     eventId: advEventId,
@@ -401,15 +453,15 @@
 
             const handleUpdateAdvance = async (e, id) => {
                 e.preventDefault();
-                if (!editAdvHeadcount || !editAdvAmount) return;
-                await db.collection('advances').doc(id).update({
+                if (!auth.currentUser || !editAdvHeadcount || !editAdvAmount) return;
+                await updateDoc(getDocRef('advances', id), {
                     headcount: parseInt(editAdvHeadcount, 10),
                     amount: parseInt(editAdvAmount, 10)
                 });
                 setEditingAdvanceId(null);
             };
 
-            if (!isFirebaseReady) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-500">データを読み込み中...</div>;
+            if (!isFirebaseReady) return <div className="min-h-screen flex items-center justify-center font-bold text-emerald-600">データを読み込み中...</div>;
 
             if (!currentUser) {
                 const loginMsgs = messages.filter(m => m.showOnLogin);
@@ -430,22 +482,22 @@
                             )}
 
                             <form onSubmit={handleLogin} className="space-y-4">
-                                {loginError && <p className="text-red-500 text-sm font-bold text-center bg-red-50 py-2 rounded">{loginError}</p>}
+                                {loginError && <p className="text-red-500 text-sm font-bold text-center bg-red-50 py-2 rounded-xl">{loginError}</p>}
                                 <div>
                                     <label className="text-xs font-bold text-gray-500 ml-1 mb-1 block">ログインID (カタカナ)</label>
-                                    <input type="text" placeholder="例: ヤマダタロウ" required value={loginId} onChange={e => setLoginId(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-gray-50" />
+                                    <input type="text" placeholder="例: ヤマダタロウ" required value={loginId} onChange={e => setLoginId(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-gray-50 outline-none transition" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-gray-500 ml-1 mb-1 block">パスワード</label>
-                                    <input type="password" placeholder="パスワード" required value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-gray-50" />
+                                    <input type="password" placeholder="パスワード" required value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-gray-50 outline-none transition" />
                                 </div>
-                                <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-md">ログイン</button>
+                                <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 transition shadow-md mt-2">ログイン</button>
                             </form>
                         </div>
                         
                         {showLoginMessages && (
-                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                                <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto relative shadow-xl">
+                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 modal-overlay">
+                                <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto relative shadow-xl modal-content">
                                     <button onClick={() => setShowLoginMessages(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full p-1"><Icons.X className="w-5 h-5" /></button>
                                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-emerald-800"><Icons.Bell className="w-6 h-6" /> 管理者からのお知らせ</h2>
                                     <div className="space-y-4">
@@ -470,6 +522,7 @@
 
             return (
                 <div className="min-h-screen bg-gray-50 pb-24">
+                    {}
                     <header className="bg-white shadow-sm sticky top-0 z-20 border-b-2 border-emerald-500">
                         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
                             <div className="flex items-center gap-2 text-emerald-800">
@@ -485,30 +538,31 @@
                                 </button>
                                 <button onClick={() => setShowPopupMessages('all')} className="relative p-2 text-gray-500 hover:text-amber-500 transition-colors" title="お知らせ">
                                     <Icons.Bell className="w-5 h-5" />
-                                    {messages.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
+                                    {messages.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
                                 </button>
-                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-full text-sm font-bold text-gray-700">
-                                    <Icons.UserCircle className="w-4 h-4" /> {currentUser.name}
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-full text-sm font-bold text-gray-700 border border-gray-200">
+                                    <Icons.UserCircle className="w-4 h-4 text-emerald-600" /> {currentUser.name}
                                 </div>
-                                <button onClick={() => {setCurrentUser(null); setHasSeenPopup(false);}} className="text-gray-500 hover:text-red-500 p-1"><Icons.LogOut className="w-5 h-5" /></button>
+                                <button onClick={() => {setCurrentUser(null); setHasSeenPopup(false);}} className="text-gray-500 hover:text-red-500 p-1" title="ログアウト"><Icons.LogOut className="w-5 h-5" /></button>
                             </div>
                         </div>
                     </header>
 
                     <main className="max-w-3xl mx-auto px-4 py-6">
-                        <div className="flex space-x-1 sm:space-x-2 mb-8 bg-gray-200/50 p-1 rounded-xl overflow-x-auto hide-scrollbar">
+                        {}
+                        <div className="flex space-x-1 sm:space-x-2 mb-8 bg-gray-200/60 p-1 rounded-xl overflow-x-auto hide-scrollbar">
                             {currentUser.role === 'admin' ? (
                                 <>
-                                    <button onClick={() => setActiveTab('admin_data')} className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'admin_data' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}><Icons.Activity className="w-5 h-5" />データ管理</button>
-                                    <button onClick={() => setActiveTab('admin_users')} className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'admin_users' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}><Icons.Users className="w-5 h-5" />部員管理</button>
-                                    <button onClick={() => setActiveTab('admin_events')} className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'admin_events' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}><Icons.Star className="w-5 h-5" />イベント</button>
+                                    <button onClick={() => setActiveTab('admin_data')} className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'admin_data' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Activity className="w-5 h-5" />データ管理</button>
+                                    <button onClick={() => setActiveTab('admin_users')} className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'admin_users' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Users className="w-5 h-5" />部員管理</button>
+                                    <button onClick={() => setActiveTab('admin_events')} className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all ${activeTab === 'admin_events' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Star className="w-5 h-5" />イベント</button>
                                 </>
                             ) : (
                                 <>
-                                    <button onClick={() => setActiveTab('events')} className={`flex-1 min-w-[90px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${activeTab === 'events' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}><Icons.Star className="w-4 h-4" />イベント</button>
-                                    <button onClick={() => setActiveTab('attendance')} className={`flex-1 min-w-[80px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${activeTab === 'attendance' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}><Icons.Calendar className="w-4 h-4" />出欠</button>
-                                    <button onClick={() => setActiveTab('voting')} className={`flex-1 min-w-[90px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all relative ${activeTab === 'voting' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}><Icons.Vote className="w-4 h-4" />義務日</button>
-                                    <button onClick={() => setActiveTab('practice')} className={`flex-1 min-w-[80px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${activeTab === 'practice' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}><Icons.Activity className="w-4 h-4" />自主練</button>
+                                    <button onClick={() => setActiveTab('events')} className={`flex-1 min-w-[90px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${activeTab === 'events' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Star className="w-4 h-4" />イベント</button>
+                                    <button onClick={() => setActiveTab('attendance')} className={`flex-1 min-w-[80px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${activeTab === 'attendance' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Calendar className="w-4 h-4" />出欠</button>
+                                    <button onClick={() => setActiveTab('voting')} className={`flex-1 min-w-[90px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all relative ${activeTab === 'voting' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Vote className="w-4 h-4" />義務日</button>
+                                    <button onClick={() => setActiveTab('practice')} className={`flex-1 min-w-[80px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${activeTab === 'practice' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Activity className="w-4 h-4" />自主練</button>
                                 </>
                             )}
                         </div>
@@ -521,18 +575,19 @@
                                         <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-emerald-700 border-b pb-2"><Icons.PlusCircle className="w-5 h-5" />新規イベント追加</h2>
                                         <form onSubmit={async (e) => {
                                             e.preventDefault();
+                                            if(!auth.currentUser) return;
                                             const eId = `ce_${Date.now()}`;
-                                            await db.collection('custom_events').doc(eId).set({ id: eId, title: newEventTitle, date: newEventDate, time: newEventTime, location: newEventLoc, description: newEventDesc });
+                                            await setDoc(getDocRef('custom_events', eId), { id: eId, title: newEventTitle, date: newEventDate, time: newEventTime, location: newEventLoc, description: newEventDesc });
                                             setNewEventTitle(''); setNewEventDate(''); setNewEventTime(''); setNewEventLoc(''); setNewEventDesc('');
                                         }} className="space-y-3">
-                                            <input type="text" placeholder="イベント名 (例: 夏合宿コンペ)" required value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} className="w-full p-2.5 text-sm border rounded bg-gray-50 focus:ring-emerald-500 outline-none" />
+                                            <input type="text" placeholder="イベント名 (例: 夏合宿コンペ)" required value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" />
                                             <div className="flex gap-2">
-                                                <input type="date" required value={newEventDate} onChange={e=>setNewEventDate(e.target.value)} className="w-full p-2.5 text-sm border rounded bg-gray-50" />
-                                                <input type="time" required value={newEventTime} onChange={e=>setNewEventTime(e.target.value)} className="w-full p-2.5 text-sm border rounded bg-gray-50" />
+                                                <input type="date" required value={newEventDate} onChange={e=>setNewEventDate(e.target.value)} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                                                <input type="time" required value={newEventTime} onChange={e=>setNewEventTime(e.target.value)} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" />
                                             </div>
-                                            <input type="text" placeholder="場所 (例: 琉球ゴルフ倶楽部)" required value={newEventLoc} onChange={e=>setNewEventLoc(e.target.value)} className="w-full p-2.5 text-sm border rounded bg-gray-50" />
-                                            <textarea placeholder="詳細や注意事項など" rows="2" value={newEventDesc} onChange={e=>setNewEventDesc(e.target.value)} className="w-full p-2.5 text-sm border rounded bg-gray-50 resize-none"></textarea>
-                                            <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-2.5 rounded-lg hover:bg-emerald-700 transition">イベントを作成する</button>
+                                            <input type="text" placeholder="場所 (例: 琉球ゴルフ倶楽部)" required value={newEventLoc} onChange={e=>setNewEventLoc(e.target.value)} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                                            <textarea placeholder="詳細や注意事項など" rows="2" value={newEventDesc} onChange={e=>setNewEventDesc(e.target.value)} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 resize-none focus:ring-2 focus:ring-emerald-500 outline-none"></textarea>
+                                            <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 transition shadow-sm mt-2">イベントを作成する</button>
                                         </form>
                                     </div>
                                 )}
@@ -540,7 +595,7 @@
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                     <h2 className="text-xl font-bold text-emerald-800 mb-4 flex items-center gap-2 border-b pb-2"><Icons.Star className="w-6 h-6" />特別イベント・コンペ</h2>
                                     {customEvents.length === 0 ? (
-                                        <p className="text-gray-500 text-sm text-center py-6">現在予定されているイベントはありません。</p>
+                                        <p className="text-gray-500 text-sm text-center py-6 bg-gray-50 rounded-xl">現在予定されているイベントはありません。</p>
                                     ) : (
                                         <div className="space-y-4">
                                             {customEvents.map(ce => {
@@ -551,50 +606,50 @@
                                                 const absentees = Object.keys(users).filter(uid => users[uid] && users[uid].role === 'user' && (eventAttendance[uid]?.[ce.id]?.status === '不参加')).map(uid => users[uid].name);
 
                                                 return (
-                                                    <div key={ce.id} className={`p-4 rounded-xl border-2 ${isPast ? 'bg-gray-50 border-gray-200 opacity-80' : 'bg-white border-amber-300 shadow-sm'}`}>
+                                                    <div key={ce.id} className={`p-4 rounded-xl border-2 transition-all ${isPast ? 'bg-gray-50 border-gray-200 opacity-80' : 'bg-white border-amber-300 shadow-sm hover:border-amber-400'}`}>
                                                         <div className="flex justify-between items-start mb-2">
                                                             <div>
-                                                                <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded mb-1 inline-block">{ce.date} {ce.time}</span>
-                                                                <h3 className="font-bold text-lg text-gray-900">{ce.title}</h3>
+                                                                <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded-md mb-2 inline-block">{ce.date} {ce.time}</span>
+                                                                <h3 className="font-bold text-lg text-gray-900 leading-tight">{ce.title}</h3>
                                                             </div>
-                                                            {isPast && <span className="text-xs bg-gray-200 px-2 py-1 rounded font-bold">終了</span>}
+                                                            {isPast && <span className="text-xs bg-gray-200 px-2 py-1 rounded-md font-bold text-gray-600">終了</span>}
                                                             {activeTab === 'admin_events' && (
-                                                                <button onClick={()=>db.collection('custom_events').doc(ce.id).delete()} className="text-red-400 hover:text-red-600 p-1"><Icons.Trash2 className="w-4 h-4" /></button>
+                                                                <button onClick={()=> auth.currentUser && deleteDoc(getDocRef('custom_events', ce.id))} className="text-red-400 hover:text-red-600 p-1 bg-red-50 rounded-lg"><Icons.Trash2 className="w-4 h-4" /></button>
                                                             )}
                                                         </div>
-                                                        <div className="text-sm text-gray-600 mb-3 space-y-1">
-                                                            <p className="flex items-center gap-1"><Icons.MapPin className="w-3 h-3" />{ce.location}</p>
-                                                            {ce.description && <p className="bg-gray-50 p-2 rounded text-xs mt-1">{ce.description}</p>}
+                                                        <div className="text-sm text-gray-600 mb-4 space-y-1.5">
+                                                            <p className="flex items-center gap-1.5 font-medium"><Icons.MapPin className="w-4 h-4 text-gray-400" />{ce.location}</p>
+                                                            {ce.description && <p className="bg-gray-50 p-2.5 rounded-lg text-xs mt-2 border border-gray-100 leading-relaxed">{ce.description}</p>}
                                                         </div>
 
                                                         {activeTab === 'events' && (
-                                                            <div className="flex gap-2 border-t pt-3 mt-2">
+                                                            <div className="flex gap-2 border-t pt-4 mt-2">
                                                                 {isPast ? (
-                                                                    <div className="w-full text-center bg-gray-100 text-gray-500 font-bold py-2 rounded-lg text-sm">{myAtt || '未回答'}</div>
+                                                                    <div className="w-full text-center bg-gray-100 text-gray-500 font-bold py-2 rounded-xl text-sm">回答: {myAtt || '未回答'}</div>
                                                                 ) : (
                                                                     <>
-                                                                        <button onClick={() => toggleEventAttendance(ce.id, '参加')} className={`flex-1 py-2 rounded-lg font-bold text-sm border-2 transition ${myAtt === '参加' ? 'bg-amber-100 border-amber-500 text-amber-800' : 'bg-white border-gray-200'}`}>参加</button>
-                                                                        <button onClick={() => toggleEventAttendance(ce.id, '不参加')} className={`flex-1 py-2 rounded-lg font-bold text-sm border-2 transition ${myAtt === '不参加' ? 'bg-red-50 border-red-400 text-red-700' : 'bg-white border-gray-200'}`}>不参加</button>
+                                                                        <button onClick={() => toggleEventAttendance(ce.id, '参加')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${myAtt === '参加' ? 'bg-amber-100 border-amber-500 text-amber-800 shadow-inner' : 'bg-white border-gray-200 text-gray-700 hover:border-amber-300'}`}>参加</button>
+                                                                        <button onClick={() => toggleEventAttendance(ce.id, '不参加')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${myAtt === '不参加' ? 'bg-red-50 border-red-400 text-red-700 shadow-inner' : 'bg-white border-gray-200 text-gray-700 hover:border-red-300'}`}>不参加</button>
                                                                     </>
                                                                 )}
                                                             </div>
                                                         )}
                                                         
                                                         {activeTab === 'events' && (
-                                                            <div className="mt-2 border-t border-gray-100 pt-2">
-                                                                <button onClick={() => setExpandedCustomEvent(expandedCustomEvent === ce.id ? null : ce.id)} className="flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-emerald-600 transition-colors w-full p-1 justify-center">
+                                                            <div className="mt-3 border-t border-gray-100 pt-2">
+                                                                <button onClick={() => setExpandedCustomEvent(expandedCustomEvent === ce.id ? null : ce.id)} className="flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-emerald-600 transition-colors w-full p-1 justify-center rounded-lg hover:bg-gray-50">
                                                                     {expandedCustomEvent === ce.id ? <Icons.ChevronUp className="w-4 h-4" /> : <Icons.ChevronDown className="w-4 h-4" />}
                                                                     参加状況を確認する（予定: {attendees.length}名）
                                                                 </button>
                                                                 {expandedCustomEvent === ce.id && (
-                                                                    <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs space-y-2">
+                                                                    <div className="mt-2 p-3 bg-gray-50 rounded-xl border border-gray-100 text-xs space-y-3">
                                                                         <div>
-                                                                            <span className="font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded mr-1">参加 {attendees.length}</span>
-                                                                            <span className="text-gray-600">{attendees.join(', ') || 'なし'}</span>
+                                                                            <span className="font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-md mr-2">参加 {attendees.length}名</span>
+                                                                            <span className="text-gray-600 font-medium">{attendees.join(', ') || 'なし'}</span>
                                                                         </div>
                                                                         <div>
-                                                                            <span className="font-bold text-gray-600 bg-gray-200 px-1.5 py-0.5 rounded mr-1">不参加 {absentees.length}</span>
-                                                                            <span className="text-gray-500">{absentees.join(', ') || 'なし'}</span>
+                                                                            <span className="font-bold text-gray-700 bg-gray-200 px-2 py-1 rounded-md mr-2">不参加 {absentees.length}名</span>
+                                                                            <span className="text-gray-500 font-medium">{absentees.join(', ') || 'なし'}</span>
                                                                         </div>
                                                                     </div>
                                                                 )}
@@ -602,14 +657,14 @@
                                                         )}
 
                                                         {activeTab === 'admin_events' && (
-                                                            <div className="mt-3 border-t pt-3 text-sm grid grid-cols-2 gap-2">
-                                                                <div className="bg-amber-50 p-2 rounded">
-                                                                    <div className="font-bold text-amber-700 border-b border-amber-200 pb-1 mb-1">参加: {attendees.length}名</div>
-                                                                    <div className="text-xs text-gray-600">{attendees.join(', ') || '-'}</div>
+                                                            <div className="mt-4 border-t pt-3 text-sm grid grid-cols-2 gap-3">
+                                                                <div className="bg-amber-50 p-3 rounded-xl border border-amber-100">
+                                                                    <div className="font-bold text-amber-800 border-b border-amber-200 pb-1.5 mb-2">参加: {attendees.length}名</div>
+                                                                    <div className="text-xs text-gray-700 leading-relaxed">{attendees.join(', ') || '-'}</div>
                                                                 </div>
-                                                                <div className="bg-gray-50 p-2 rounded">
-                                                                    <div className="font-bold text-gray-600 border-b border-gray-200 pb-1 mb-1">不参加: {absentees.length}名</div>
-                                                                    <div className="text-xs text-gray-500">{absentees.join(', ') || '-'}</div>
+                                                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                                                                    <div className="font-bold text-gray-700 border-b border-gray-200 pb-1.5 mb-2">不参加: {absentees.length}名</div>
+                                                                    <div className="text-xs text-gray-500 leading-relaxed">{absentees.join(', ') || '-'}</div>
                                                                 </div>
                                                             </div>
                                                         )}
@@ -632,20 +687,20 @@
                                     const isExpanded = expandedMonths[monthStr];
 
                                     return (
-                                        <div key={monthStr} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                                            <button onClick={() => setExpandedMonths(p => ({...p, [monthStr]: !p[monthStr]}))} className="w-full flex justify-between font-bold text-lg text-emerald-800 border-b pb-2 mb-4">
-                                                <span>{monthStr.replace('-','年')}月 出欠</span>
-                                                {isExpanded ? <Icons.ChevronUp className="w-5 h-5" /> : <Icons.ChevronDown className="w-5 h-5" />}
+                                        <div key={monthStr} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 transition-all">
+                                            <button onClick={() => setExpandedMonths(p => ({...p, [monthStr]: !p[monthStr]}))} className="w-full flex justify-between items-center font-bold text-lg text-emerald-800 border-b pb-3 mb-2 hover:text-emerald-600 transition-colors rounded-t-lg">
+                                                <span className="flex items-center gap-2"><Icons.Calendar className="w-5 h-5"/>{monthStr.replace('-','年')}月 出欠</span>
+                                                <div className="p-1 bg-emerald-50 rounded-full">{isExpanded ? <Icons.ChevronUp className="w-5 h-5 text-emerald-600" /> : <Icons.ChevronDown className="w-5 h-5 text-emerald-600" />}</div>
                                             </button>
                                             {isExpanded && (
                                                 isLocked ? (
-                                                    <div className="p-4 bg-red-50 text-red-700 rounded-xl text-center font-bold">
-                                                        <Icons.AlertCircle className="w-8 h-8 mx-auto mb-2" />
-                                                        先に「義務日」の申告をしてください
-                                                        <button onClick={()=>setActiveTab('voting')} className="block w-full mt-3 bg-red-600 text-white py-2 rounded-lg">義務日を投票する</button>
+                                                    <div className="p-6 bg-red-50 text-red-800 rounded-xl text-center font-bold border border-red-100 mt-4 shadow-inner">
+                                                        <Icons.AlertCircle className="w-10 h-10 mx-auto mb-3 text-red-500" />
+                                                        <p className="mb-4">先に「義務日」の申告を完了してください。</p>
+                                                        <button onClick={()=>setActiveTab('voting')} className="block w-full max-w-xs mx-auto bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition shadow-md">義務日を投票する</button>
                                                     </div>
                                                 ) : (
-                                                    <div className="space-y-3">
+                                                    <div className="space-y-3 mt-4">
                                                         {mEvents.map(event => {
                                                             const isPast = isEventPast(event.endTime);
                                                             const isHoliday = isDateInHoliday(event.date);
@@ -659,70 +714,70 @@
                                                             const absentees = Object.keys(users).filter(uid => users[uid] && users[uid].role === 'user' && (attendance[uid]?.[event.id]?.status === '欠席')).map(uid => users[uid].name);
 
                                                             return (
-                                                                <div key={event.id} className={`p-3.5 rounded-xl border-2 transition-all ${isPast ? 'bg-gray-100 border-gray-200 opacity-70' : isHoliday ? 'bg-blue-50/50 border-blue-200' : isMandatory ? 'bg-yellow-50 border-yellow-400' : 'bg-white border-gray-100'}`}>
-                                                                    <div className="flex flex-col sm:flex-row justify-between gap-3">
+                                                                <div key={event.id} className={`p-4 rounded-xl border-2 transition-all ${isPast ? 'bg-gray-100 border-gray-200 opacity-70' : isHoliday ? 'bg-blue-50/40 border-blue-200' : isMandatory ? 'bg-amber-50/50 border-amber-300' : 'bg-white border-gray-100 hover:border-emerald-200'}`}>
+                                                                    <div className="flex flex-col sm:flex-row justify-between gap-4">
                                                                         <div>
-                                                                            <div className="font-bold flex items-center gap-2 text-gray-800">
+                                                                            <div className="font-bold flex items-center gap-2 text-gray-800 text-[15px]">
                                                                                 {event.label}
-                                                                                {isPast && <span className="text-[10px] bg-gray-200 px-2 rounded-full flex items-center gap-1"><Icons.Clock className="w-3 h-3" />終了</span>}
-                                                                                {isHoliday && <span className="text-[10px] bg-blue-100 text-blue-800 px-2 rounded-full font-bold">長期休み</span>}
-                                                                                {isMandatory && !isHoliday && <span className="text-[10px] bg-yellow-400 text-yellow-900 px-2 rounded-full font-bold">義務日</span>}
+                                                                                {isPast && <span className="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-md flex items-center gap-1"><Icons.Clock className="w-3 h-3" />終了</span>}
+                                                                                {isHoliday && <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-bold">長期休み免除</span>}
+                                                                                {isMandatory && !isHoliday && <span className="text-[10px] bg-amber-400 text-amber-900 px-2 py-0.5 rounded-md font-bold">あなたの義務日</span>}
                                                                             </div>
                                                                         </div>
-                                                                        <div className="flex gap-2">
+                                                                        <div className="flex gap-2 shrink-0">
                                                                             {isPast ? (
-                                                                                <div className="text-sm font-bold text-gray-500 bg-gray-200 px-4 py-2 rounded-lg w-full text-center">{myAtt.status || '未入力'}</div>
+                                                                                <div className="text-sm font-bold text-gray-600 bg-gray-200/80 px-4 py-2.5 rounded-xl w-full text-center border border-gray-300">{myAtt.status || '未入力'}</div>
                                                                             ) : isMandatory ? (
                                                                                 <>
-                                                                                    <button onClick={()=>toggleAttendance(event.id, '出席', true)} className={`flex-1 sm:w-24 py-2 rounded-lg text-sm font-bold border-2 ${myAtt.status === '出席' || !myAtt.status ? 'bg-green-100 border-green-500 text-green-700' : 'bg-white border-gray-200'}`}>出席</button>
-                                                                                    <button onClick={()=>toggleAttendance(event.id, '欠席', true)} className={`flex-1 sm:w-20 py-2 rounded-lg text-sm font-bold border-2 ${myAtt.status === '欠席' ? 'bg-red-100 border-red-500 text-red-700' : 'bg-white border-gray-200'}`}>欠席</button>
+                                                                                    <button onClick={()=>toggleAttendance(event.id, '出席', true)} className={`flex-1 sm:w-24 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${myAtt.status === '出席' || !myAtt.status ? 'bg-green-100 border-green-500 text-green-800 shadow-inner' : 'bg-white border-gray-200 text-gray-600 hover:border-green-300'}`}>出席</button>
+                                                                                    <button onClick={()=>toggleAttendance(event.id, '欠席', true)} className={`flex-1 sm:w-20 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${myAtt.status === '欠席' ? 'bg-red-100 border-red-500 text-red-800 shadow-inner' : 'bg-white border-gray-200 text-gray-600 hover:border-red-300'}`}>欠席</button>
                                                                                 </>
                                                                             ) : (
-                                                                                <button onClick={()=>toggleAttendance(event.id, '希望出席', false)} className={`w-full sm:w-32 py-2 rounded-lg text-sm font-bold border-2 ${myAtt.status === '希望出席' ? 'bg-blue-100 border-blue-500 text-blue-700' : 'bg-white border-gray-200'}`}>希望参加</button>
+                                                                                <button onClick={()=>toggleAttendance(event.id, '希望出席', false)} className={`w-full sm:w-32 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${myAtt.status === '希望出席' ? 'bg-blue-100 border-blue-500 text-blue-800 shadow-inner' : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300'}`}>希望参加</button>
                                                                             )}
                                                                         </div>
                                                                     </div>
                                                                     
                                                                     {myAtt.status === '欠席' && needsReason && (
-                                                                        <div className="mt-2">
+                                                                        <div className="mt-3">
                                                                             {myAtt.isReasonSubmitted || isPast ? (
-                                                                                <div className="p-2 bg-red-50 border border-red-100 rounded text-sm flex justify-between">
-                                                                                    <span className="text-gray-700">{myAtt.reason || '(未入力)'}</span>
-                                                                                    {!isPast && <button onClick={()=>db.collection('attendance').doc(currentUser.id).set({[event.id]: {...myAtt, isReasonSubmitted: false}},{merge:true})} className="text-xs text-indigo-600 font-bold">編集</button>}
+                                                                                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm flex justify-between items-center shadow-inner">
+                                                                                    <span className="text-gray-800 font-medium">{myAtt.reason || '(未入力)'}</span>
+                                                                                    {!isPast && <button onClick={()=> { if(auth.currentUser) setDoc(getDocRef('attendance', currentUser.id), {[event.id]: {...myAtt, isReasonSubmitted: false}}, {merge:true})}} className="text-xs text-indigo-600 hover:text-indigo-800 font-bold bg-white px-2 py-1 rounded border border-indigo-200">編集</button>}
                                                                                 </div>
                                                                             ) : (
-                                                                                <div className="flex flex-col gap-1">
-                                                                                    <textarea id={`reason_${event.id}`} defaultValue={myAtt.reason} placeholder="欠席理由を入力" className="w-full p-2 text-sm border-2 border-red-200 rounded outline-none focus:border-red-400" rows="1"></textarea>
+                                                                                <div className="flex flex-col gap-2">
+                                                                                    <textarea id={`reason_${event.id}`} defaultValue={myAtt.reason} placeholder="欠席理由を入力してください (必須)" className="w-full p-3 text-sm border-2 border-red-200 rounded-lg outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 transition" rows="2"></textarea>
                                                                                     <button onClick={()=>{
                                                                                         const val = document.getElementById(`reason_${event.id}`).value;
-                                                                                        if(val) db.collection('attendance').doc(currentUser.id).set({[event.id]: {...myAtt, reason: val, isReasonSubmitted: true}},{merge:true});
-                                                                                    }} className="self-end bg-red-600 text-white px-3 py-1.5 rounded text-xs font-bold">送信</button>
+                                                                                        if(val && auth.currentUser) setDoc(getDocRef('attendance', currentUser.id), {[event.id]: {...myAtt, reason: val, isReasonSubmitted: true}}, {merge:true});
+                                                                                    }} className="self-end bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm">理由を送信</button>
                                                                                 </div>
                                                                             )}
                                                                         </div>
                                                                     )}
                                                                     {myAtt.status === '欠席' && isMandatory && isExempt && (
-                                                                        <div className="mt-2 text-xs font-bold text-amber-600 bg-amber-50 p-1.5 rounded text-center">特例免除適用中のため理由の送信は不要です</div>
+                                                                        <div className="mt-3 text-xs font-bold text-amber-700 bg-amber-100 p-2 rounded-lg text-center border border-amber-200">特例免除適用中のため理由の送信は不要です</div>
                                                                     )}
 
-                                                                    <div className="mt-2 border-t border-gray-100 pt-2">
-                                                                        <button onClick={() => setExpandedEvent(expandedEvent === event.id ? null : event.id)} className="flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-emerald-600 transition-colors w-full p-1 justify-center">
+                                                                    <div className="mt-4 border-t border-gray-100/60 pt-2">
+                                                                        <button onClick={() => setExpandedEvent(expandedEvent === event.id ? null : event.id)} className="flex items-center gap-1.5 text-xs font-bold text-gray-400 hover:text-emerald-600 transition-colors w-full p-2 justify-center rounded-lg hover:bg-gray-50/50">
                                                                             {expandedEvent === event.id ? <Icons.ChevronUp className="w-4 h-4" /> : <Icons.ChevronDown className="w-4 h-4" />}
                                                                             参加状況を確認する（出席予定: {attendees.length + hopeAttendees.length}名）
                                                                         </button>
                                                                         {expandedEvent === event.id && (
-                                                                            <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs space-y-2">
+                                                                            <div className="mt-2 p-3 bg-gray-50/80 rounded-xl border border-gray-200 text-xs space-y-3">
                                                                                 <div>
-                                                                                    <span className="font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded mr-1">出席 {attendees.length}</span>
-                                                                                    <span className="text-gray-600">{attendees.join(', ') || '-'}</span>
+                                                                                    <span className="font-bold text-green-800 bg-green-100 border border-green-200 px-2 py-1 rounded-md mr-2">出席 {attendees.length}</span>
+                                                                                    <span className="text-gray-700 font-medium">{attendees.join(', ') || '-'}</span>
                                                                                 </div>
                                                                                 <div>
-                                                                                    <span className="font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded mr-1">希望 {hopeAttendees.length}</span>
-                                                                                    <span className="text-gray-600">{hopeAttendees.join(', ') || '-'}</span>
+                                                                                    <span className="font-bold text-blue-800 bg-blue-100 border border-blue-200 px-2 py-1 rounded-md mr-2">希望 {hopeAttendees.length}</span>
+                                                                                    <span className="text-gray-700 font-medium">{hopeAttendees.join(', ') || '-'}</span>
                                                                                 </div>
                                                                                 <div>
-                                                                                    <span className="font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded mr-1">欠席 {absentees.length}</span>
-                                                                                    <span className="text-gray-500">{absentees.join(', ') || '-'}</span>
+                                                                                    <span className="font-bold text-red-800 bg-red-100 border border-red-200 px-2 py-1 rounded-md mr-2">欠席 {absentees.length}</span>
+                                                                                    <span className="text-gray-600 font-medium">{absentees.join(', ') || '-'}</span>
                                                                                 </div>
                                                                             </div>
                                                                         )}
@@ -742,8 +797,8 @@
                         {}
                         {activeTab === 'voting' && (
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                                <h2 className="text-xl font-bold text-emerald-800 mb-2">義務日の申告</h2>
-                                <p className="text-sm text-gray-600 mb-6 border-b pb-4">対象月に週1回必ず参加する曜日を選んでください。</p>
+                                <h2 className="text-xl font-bold text-emerald-800 mb-2 flex items-center gap-2"><Icons.Vote className="w-6 h-6" /> 義務日の申告</h2>
+                                <p className="text-sm text-gray-600 mb-6 border-b pb-4 leading-relaxed">対象月 ({selectedVoteMonth.replace('-','年')}月) に週1回必ず参加する曜日を選んでください。<br/>※月ごとの固定となります。</p>
                                 
                                 <div className="space-y-3 mb-6">
                                     {dayTypes.filter(d => d.isVoteable).map(day => {
@@ -758,23 +813,23 @@
                                         });
 
                                         return (
-                                            <div key={day.id} className="flex flex-col gap-1">
-                                                <button onClick={()=>setSelectedVoteDay(day.id)} className={`flex justify-between items-center p-4 rounded-xl border-2 transition-all ${isSelected ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-gray-200 bg-white hover:border-emerald-300'}`}>
+                                            <div key={day.id} className="flex flex-col gap-1.5">
+                                                <button onClick={()=>setSelectedVoteDay(day.id)} className={`flex justify-between items-center p-4 rounded-xl border-2 transition-all group ${isSelected ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-gray-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/30'}`}>
                                                     <span className={`font-bold ${isSelected ? 'text-emerald-900' : 'text-gray-700'}`}>
                                                         {day.label}
-                                                        {isSaved && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full ml-2">現在の設定</span>}
+                                                        {isSaved && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full ml-3 inline-block align-middle mb-0.5">現在の設定</span>}
                                                     </span>
-                                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300'}`}>
+                                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 group-hover:border-emerald-300'}`}>
                                                         {isSelected && <Icons.Check className="w-4 h-4" />}
                                                     </div>
                                                 </button>
-                                                {sortedVotedUsers.length > 0 && <div className="text-xs text-gray-500 px-2"><span className="font-bold text-gray-400">投票済:</span> {sortedVotedUsers.join(', ')}</div>}
+                                                {sortedVotedUsers.length > 0 && <div className="text-[11px] text-gray-500 px-3 bg-gray-50 py-1.5 rounded-lg w-fit"><span className="font-bold text-gray-400">投票済:</span> {sortedVotedUsers.join(', ')}</div>}
                                             </div>
                                         );
                                     })}
                                 </div>
                                 
-                                <label className="flex items-center gap-2 bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 cursor-pointer">
+                                <label className="flex items-center gap-3 bg-gray-50 hover:bg-gray-100 transition-colors p-4 rounded-xl border border-gray-200 mb-6 cursor-pointer">
                                     <input type="checkbox" checked={isExemptChecked} onChange={e=>setIsExemptChecked(e.target.checked)} className="w-5 h-5 accent-emerald-600 rounded" />
                                     <span className="text-sm font-bold text-gray-700">特例免除（理由送信不要）を適用する</span>
                                 </label>
@@ -789,7 +844,7 @@
                                         <button 
                                             onClick={() => { if(selectedVoteDay==='tue1'||selectedVoteDay==='thu1') setShowWarningModal(true); else finalizeVote(); }}
                                             disabled={!selectedVoteDay || isMonthStarted || isUnchanged}
-                                            className="w-full py-4 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition shadow-md"
+                                            className="w-full py-4 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-md"
                                         >
                                             {isMonthStarted ? 'この月の申告期間は終了しました' : isUnchanged ? '現在の設定で確定済みです' : 'この設定で確定する'}
                                         </button>
@@ -797,15 +852,15 @@
                                 })()}
                                 
                                 {showWarningModal && (
-                                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                                        <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+                                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 modal-overlay">
+                                        <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl modal-content">
                                             <div className="flex items-center gap-3 text-amber-500 mb-4">
-                                                <Icons.AlertCircle className="w-6 h-6" /><h3 className="font-bold text-lg text-gray-900">ご協力のお願い</h3>
+                                                <Icons.AlertCircle className="w-8 h-8" /><h3 className="font-bold text-lg text-gray-900 leading-tight">ご協力のお願い</h3>
                                             </div>
-                                            <p className="text-sm text-gray-700 mb-6">火曜日と木曜日は人が集中しやすくなっています。他の曜日への分散にご協力をお願いいたします。</p>
+                                            <p className="text-sm text-gray-700 mb-6 leading-relaxed">火曜日と木曜日は人が集中しやすくなっています。他の曜日への分散にご協力をお願いいたします。</p>
                                             <div className="flex gap-3">
-                                                <button onClick={()=>setShowWarningModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm">選び直す</button>
-                                                <button onClick={()=>finalizeVote()} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold text-sm">このまま確定する</button>
+                                                <button onClick={()=>setShowWarningModal(false)} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition">選び直す</button>
+                                                <button onClick={()=>finalizeVote()} className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm transition shadow-md">このまま確定</button>
                                             </div>
                                         </div>
                                     </div>
@@ -817,59 +872,68 @@
                         {activeTab === 'practice' && (
                             <div className="space-y-6">
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                                    <h2 className="text-lg font-bold text-emerald-800 mb-4 flex items-center gap-2"><Icons.Activity className="w-5 h-5" />自主練を記録する</h2>
-                                    <form onSubmit={handleRecordPractice} className="space-y-4">
-                                        <div className="grid grid-cols-1 gap-4">
+                                    <h2 className="text-lg font-bold text-emerald-800 mb-5 flex items-center gap-2 border-b pb-2"><Icons.Activity className="w-5 h-5" />自主練を記録する</h2>
+                                    <form onSubmit={handleRecordPractice} className="space-y-5">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div>
-                                                <label className="text-xs font-bold text-gray-500 mb-1 block">日付</label>
-                                                <input type="date" required value={pracDate} onChange={e=>setPracDate(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+                                                <label className="text-xs font-bold text-gray-500 ml-1 mb-1.5 block">日付</label>
+                                                <input type="date" required value={pracDate} onChange={e=>setPracDate(e.target.value)} className="w-full h-[50px] px-4 border border-gray-300 rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition" />
                                             </div>
                                             <div>
-                                                <label className="text-xs font-bold text-gray-500 mb-1 block">種類</label>
-                                                <select value={pracType} onChange={e=>setPracType(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                                <label className="text-xs font-bold text-gray-500 ml-1 mb-1.5 block">種類</label>
+                                                <select value={pracType} onChange={e=>setPracType(e.target.value)} className="w-full h-[50px] px-4 border border-gray-300 rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition">
                                                     {PRACTICE_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                                                 </select>
                                             </div>
                                         </div>
                                         {pracType === 'ゴルフレンジ' ? (
                                             <div>
-                                                <label className="text-xs font-bold text-gray-500 mb-1 block">時間（分）</label>
-                                                <select value={pracDurationOption} onChange={e=>setPracDurationOption(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl bg-gray-50 text-sm mb-2 outline-none focus:ring-2 focus:ring-emerald-500">
-                                                    <option value="30">30分</option><option value="60">60分</option><option value="90">90分</option><option value="other">その他</option>
-                                                </select>
-                                                {pracDurationOption === 'other' && <input type="number" placeholder="分数を入力" required value={pracDurationCustom} onChange={e=>setPracDurationCustom(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500" />}
+                                                <label className="text-xs font-bold text-gray-500 ml-1 mb-1.5 block">時間（分）</label>
+                                                <div className="flex gap-2 mb-2">
+                                                    <select value={pracDurationOption} onChange={e=>setPracDurationOption(e.target.value)} className="w-full h-[50px] px-4 border border-gray-300 rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition">
+                                                        <option value="30">30分</option><option value="60">60分</option><option value="90">90分</option><option value="other">その他</option>
+                                                    </select>
+                                                </div>
+                                                {pracDurationOption === 'other' && <input type="number" placeholder="分数を入力" required value={pracDurationCustom} onChange={e=>setPracDurationCustom(e.target.value)} className="w-full h-[50px] px-4 border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition shadow-inner" />}
                                             </div>
                                         ) : (
                                             <div>
-                                                <label className="text-xs font-bold text-gray-500 mb-1 block">スコア（任意）</label>
-                                                <input type="number" placeholder="スコアを入力" value={pracScore} onChange={e=>setPracScore(e.target.value)} className="w-full h-[50px] px-3 border rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+                                                <label className="text-xs font-bold text-gray-500 ml-1 mb-1.5 block">スコア（任意）</label>
+                                                <input type="number" placeholder="スコアを入力" value={pracScore} onChange={e=>setPracScore(e.target.value)} className="w-full h-[50px] px-4 border border-gray-300 rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500 transition shadow-inner" />
                                             </div>
                                         )}
-                                        {pracMessage && <div className="text-sm font-bold text-emerald-600 text-center bg-emerald-50 p-2 rounded">{pracMessage}</div>}
-                                        <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 transition">記録する</button>
+                                        {pracMessage && <div className="text-sm font-bold text-emerald-700 text-center bg-emerald-50 border border-emerald-200 py-3 rounded-xl">{pracMessage}</div>}
+                                        <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl hover:bg-emerald-700 transition shadow-md">記録を保存する</button>
                                     </form>
                                 </div>
                                 
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                                    <h3 className="font-bold text-gray-800 mb-4 border-b pb-2">種目別ベストスコア</h3>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
+                                    <h3 className="font-bold text-gray-800 mb-4 border-b pb-2 flex items-center gap-2"><Icons.Star className="w-5 h-5 text-amber-500" />種目別ベストスコア</h3>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
                                         {SCORE_TYPES.map(type => (
-                                            <div key={type} className="bg-amber-50 border border-amber-100 p-2 rounded-lg text-center">
-                                                <div className="text-[10px] text-amber-700 font-bold mb-1">{type}</div>
-                                                <div className="text-lg font-bold text-gray-900">{getBestScore(currentUser.id, type)}</div>
+                                            <div key={type} className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-center shadow-sm">
+                                                <div className="text-[11px] text-amber-800 font-bold mb-1.5">{type}</div>
+                                                <div className="text-2xl font-bold text-gray-900">{getBestScore(currentUser.id, type)}</div>
                                             </div>
                                         ))}
                                     </div>
-                                    <h3 className="font-bold text-gray-800 mb-3 border-b pb-2">最近の履歴</h3>
-                                    <div className="space-y-2">
-                                        {(practices[currentUser.id] || []).slice(0, 10).map(p => (
-                                            <div key={p.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl text-sm">
-                                                <div><div className="text-xs text-gray-500">{p.date}</div><div className="font-bold">{p.type}</div></div>
-                                                <div className="font-bold text-emerald-700">
-                                                    {p.type === 'ゴルフレンジ' ? `${p.duration}分` : (p.score ? `スコア: ${p.score}` : '-')}
+                                    <h3 className="font-bold text-gray-800 mb-4 border-b pb-2 flex items-center gap-2"><Icons.Clock className="w-5 h-5 text-gray-500" />最近の履歴</h3>
+                                    <div className="space-y-3">
+                                        {(practices[currentUser.id] || []).length === 0 ? (
+                                            <p className="text-sm text-gray-500 text-center py-4 bg-gray-50 rounded-xl">記録がありません。</p>
+                                        ) : (
+                                            (practices[currentUser.id] || []).slice(0, 10).map(p => (
+                                                <div key={p.id} className="flex justify-between items-center p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm transition-colors hover:bg-gray-100">
+                                                    <div>
+                                                        <div className="text-[11px] text-gray-500 font-bold mb-0.5">{p.date}</div>
+                                                        <div className="font-bold text-gray-800">{p.type}</div>
+                                                    </div>
+                                                    <div className="font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
+                                                        {p.type === 'ゴルフレンジ' ? `${p.duration}分` : (p.score ? `スコア: ${p.score}` : '未入力')}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -878,118 +942,132 @@
                         {}
                         {activeTab === 'admin_data' && (
                             <div className="space-y-8">
-                                {/* 長期休みの設定 */}
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                                {/* Holidays Setup */}
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                     <h2 className="text-lg font-bold mb-2 flex items-center gap-2 text-indigo-700 border-b pb-2">
-                                        <Icons.CalendarX2 className="w-5 h-5" /> 長期休みの設定
+                                        <Icons.CalendarX2 className="w-6 h-6" /> 長期休みの設定
                                     </h2>
-                                    <p className="text-xs text-gray-500 mb-4">設定した期間内のイベントは、自動的に「義務出席なし」として扱われます。</p>
+                                    <p className="text-xs text-gray-500 mb-5 leading-relaxed">設定した期間内のイベントは、自動的に「義務出席なし(免除)」として扱われます。</p>
                                     <form onSubmit={async (e) => {
                                         e.preventDefault();
-                                        if (!newHoliStart || !newHoliEnd) return;
+                                        if (!auth.currentUser || !newHoliStart || !newHoliEnd) return;
                                         const id = `holi_${Date.now()}`;
-                                        await db.collection('holidays').doc(id).set({ id, label: newHoliLabel || '長期休み', start: newHoliStart, end: newHoliEnd });
+                                        await setDoc(getDocRef('holidays', id), { id, label: newHoliLabel || '長期休み', start: newHoliStart, end: newHoliEnd });
                                         setNewHoliLabel(''); setNewHoliStart(''); setNewHoliEnd('');
-                                    }} className="space-y-3 mb-4">
-                                        <input type="text" placeholder="休みの名称 (例: 夏休み、テスト期間)" value={newHoliLabel} onChange={e=>setNewHoliLabel(e.target.value)} className="w-full p-2.5 text-sm border rounded bg-gray-50 focus:ring-indigo-500 outline-none" />
-                                        <div className="flex flex-col sm:flex-row gap-2 items-center">
-                                            <input type="date" required value={newHoliStart} onChange={e=>setNewHoliStart(e.target.value)} className="w-full sm:w-auto flex-1 p-2.5 text-sm border rounded bg-gray-50" />
+                                    }} className="space-y-4 mb-6 bg-indigo-50/30 p-4 rounded-xl border border-indigo-100">
+                                        <input type="text" placeholder="休みの名称 (例: 夏休み、テスト期間)" value={newHoliLabel} onChange={e=>setNewHoliLabel(e.target.value)} className="w-full p-3 text-sm border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition" />
+                                        <div className="flex flex-col sm:flex-row gap-3 items-center">
+                                            <input type="date" required value={newHoliStart} onChange={e=>setNewHoliStart(e.target.value)} className="w-full sm:w-auto flex-1 p-3 text-sm border border-gray-300 rounded-xl bg-white outline-none focus:ring-2 focus:ring-indigo-500" />
                                             <span className="text-sm font-bold text-gray-400">〜</span>
-                                            <input type="date" required value={newHoliEnd} onChange={e=>setNewHoliEnd(e.target.value)} className="w-full sm:w-auto flex-1 p-2.5 text-sm border rounded bg-gray-50" />
-                                            <button type="submit" className="w-full sm:w-auto bg-indigo-600 text-white font-bold px-4 py-2.5 rounded hover:bg-indigo-700 text-sm">追加</button>
+                                            <input type="date" required value={newHoliEnd} onChange={e=>setNewHoliEnd(e.target.value)} className="w-full sm:w-auto flex-1 p-3 text-sm border border-gray-300 rounded-xl bg-white outline-none focus:ring-2 focus:ring-indigo-500" />
+                                            <button type="submit" className="w-full sm:w-auto bg-indigo-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-indigo-700 text-sm shadow-md transition">追加</button>
                                         </div>
                                     </form>
-                                    <div className="space-y-2">
-                                        {holidays.map(h => (
-                                            <div key={h.id} className="flex justify-between items-center p-2.5 bg-indigo-50/50 border border-indigo-100 rounded text-sm">
-                                                <div>
-                                                    <span className="font-bold text-indigo-900 mr-2">{h.label}</span>
-                                                    <span className="text-xs text-indigo-600">{h.start} 〜 {h.end}</span>
+                                    <div className="space-y-3">
+                                        {holidays.length === 0 ? (
+                                            <p className="text-sm text-gray-500 text-center py-2">設定されていません。</p>
+                                        ) : (
+                                            holidays.map(h => (
+                                                <div key={h.id} className="flex justify-between items-center p-3.5 bg-indigo-50 border border-indigo-100 rounded-xl text-sm">
+                                                    <div>
+                                                        <span className="font-bold text-indigo-900 mr-3">{h.label}</span>
+                                                        <span className="text-xs text-indigo-700 bg-white px-2 py-1 rounded-md border border-indigo-100">{h.start} 〜 {h.end}</span>
+                                                    </div>
+                                                    <button onClick={()=> auth.currentUser && deleteDoc(getDocRef('holidays', h.id))} className="text-red-400 hover:text-red-600 p-1.5 bg-white rounded-lg shadow-sm border border-red-50"><Icons.Trash2 className="w-4 h-4" /></button>
                                                 </div>
-                                                <button onClick={()=>db.collection('holidays').doc(h.id).delete()} className="text-red-400 hover:text-red-600 p-1"><Icons.Trash2 className="w-4 h-4" /></button>
-                                            </div>
-                                        ))}
+                                            ))
+                                        )}
                                     </div>
                                 </div>
 
-                                {/* お知らせ配信 */}
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                                    <h2 className="text-lg font-bold mb-4 border-b pb-2"><Icons.Bell className="w-5 h-5 inline mr-2 text-amber-500" />全体へのお知らせ配信</h2>
+                                {/* Messages Setup */}
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                                    <h2 className="text-lg font-bold mb-5 border-b pb-2 flex items-center gap-2"><Icons.Bell className="w-6 h-6 text-amber-500" />全体へのお知らせ配信</h2>
                                     <form onSubmit={async(e)=>{
                                         e.preventDefault();
+                                        if(!auth.currentUser) return;
                                         const id = `msg_${Date.now()}`;
-                                        await db.collection('messages').doc(id).set({ id, date: new Date().toISOString().split('T')[0], title: newMsgTitle, content: newMsgContent, showOnLogin: newMsgShowOnLogin, showOnPopup: newMsgShowOnPopup });
+                                        await setDoc(getDocRef('messages', id), { id, date: new Date().toISOString().split('T')[0], title: newMsgTitle, content: newMsgContent, showOnLogin: newMsgShowOnLogin, showOnPopup: newMsgShowOnPopup });
                                         setNewMsgTitle(''); setNewMsgContent('');
-                                    }} className="space-y-3">
-                                        <input type="text" placeholder="件名" required value={newMsgTitle} onChange={e=>setNewMsgTitle(e.target.value)} className="w-full p-2 border rounded" />
-                                        <textarea placeholder="内容" required value={newMsgContent} onChange={e=>setNewMsgContent(e.target.value)} className="w-full p-2 border rounded resize-none"></textarea>
-                                        <div className="flex gap-4 text-sm font-bold text-gray-700 bg-gray-50 p-3 rounded">
-                                            <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={newMsgShowOnLogin} onChange={e=>setNewMsgShowOnLogin(e.target.checked)} className="w-4 h-4" />ログイン画面で表示</label>
-                                            <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={newMsgShowOnPopup} onChange={e=>setNewMsgShowOnPopup(e.target.checked)} className="w-4 h-4" />ログイン直後にポップアップ</label>
+                                    }} className="space-y-4">
+                                        <input type="text" placeholder="件名" required value={newMsgTitle} onChange={e=>setNewMsgTitle(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl bg-gray-50 focus:ring-2 focus:ring-amber-500 outline-none transition" />
+                                        <textarea placeholder="内容" required value={newMsgContent} onChange={e=>setNewMsgContent(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl bg-gray-50 resize-none h-24 focus:ring-2 focus:ring-amber-500 outline-none transition"></textarea>
+                                        <div className="flex flex-col sm:flex-row gap-4 text-sm font-bold text-gray-700 bg-amber-50/50 p-4 rounded-xl border border-amber-100">
+                                            <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newMsgShowOnLogin} onChange={e=>setNewMsgShowOnLogin(e.target.checked)} className="w-4 h-4 accent-amber-600 rounded" />ログイン画面で表示</label>
+                                            <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newMsgShowOnPopup} onChange={e=>setNewMsgShowOnPopup(e.target.checked)} className="w-4 h-4 accent-amber-600 rounded" />ログイン直後にポップアップ</label>
                                         </div>
-                                        <button type="submit" className="w-full bg-amber-500 text-white font-bold py-2 rounded">配信する</button>
+                                        <button type="submit" className="w-full bg-amber-500 text-white font-bold py-3.5 rounded-xl hover:bg-amber-600 shadow-md transition flex justify-center items-center gap-2">
+                                            <Icons.Send className="w-4 h-4" /> 配信する
+                                        </button>
                                     </form>
-                                    <div className="mt-4 max-h-32 overflow-y-auto border-t pt-2 space-y-2">
-                                        {messages.map(m => (
-                                            <div key={m.id} className="flex justify-between p-2 bg-gray-50 text-xs rounded border">
-                                                <div><span className="font-bold">{m.title}</span> <span className="text-gray-400">({[m.showOnLogin&&'ログ前', m.showOnPopup&&'ログ後'].filter(Boolean).join(',')})</span></div>
-                                                <button onClick={()=>db.collection('messages').doc(m.id).delete()} className="text-red-500"><Icons.Trash2 className="w-4 h-4" /></button>
+                                    <div className="mt-6 max-h-48 overflow-y-auto border-t pt-4 space-y-2.5">
+                                        <h3 className="text-xs font-bold text-gray-500 mb-2">配信済みのお知らせ</h3>
+                                        {messages.length === 0 ? <p className="text-sm text-gray-400 text-center">ありません</p> : messages.map(m => (
+                                            <div key={m.id} className="flex justify-between items-center p-3 bg-gray-50 text-xs rounded-xl border border-gray-200 hover:border-amber-200 transition">
+                                                <div>
+                                                    <span className="font-bold text-gray-800 text-sm block mb-1">{m.title}</span> 
+                                                    <span className="text-[10px] bg-white px-2 py-0.5 border rounded text-amber-700 font-bold">({[m.showOnLogin&&'ログ前', m.showOnPopup&&'ログ後'].filter(Boolean).join(' / ') || '非表示'})</span>
+                                                </div>
+                                                <button onClick={()=> auth.currentUser && deleteDoc(getDocRef('messages', m.id))} className="text-red-400 hover:text-red-600 bg-white p-1.5 rounded-lg border border-gray-100 shadow-sm"><Icons.Trash2 className="w-4 h-4" /></button>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
-                                {/* 定期練習日の追加・編集 */}
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                                    <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2"><Icons.Settings className="w-5 h-5 text-indigo-500" />定期練習日の追加・編集</h2>
-                                    <p className="text-xs text-gray-500 mb-3">部活の日程が変わった際や新しい枠を作る際にここで追加・削除してください。</p>
+                                {/* Regular Practice Setup */}
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                                    <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2"><Icons.Settings className="w-6 h-6 text-gray-600" />定期練習日の追加・編集</h2>
+                                    <p className="text-xs text-gray-500 mb-4 leading-relaxed">部活の日程が変わった際や新しい枠を作る際にここで追加・削除してください。追加した枠は自動でカレンダーに反映されます。</p>
                                     <form onSubmit={async(e)=>{
                                         e.preventDefault();
+                                        if(!auth.currentUser) return;
                                         const id = `day_${Date.now()}`;
                                         const newList = [...dayTypes, { id, label: newDayLabel, dayOfWeek: parseInt(newDayOfWeek, 10), isVoteable: newDayIsVoteable }];
-                                        await db.collection('settings').doc('dayTypes').set({ list: newList });
+                                        await setDoc(getDocRef('settings', 'dayTypes'), { list: newList });
                                         setNewDayLabel(''); setNewDayIsVoteable(true);
-                                    }} className="space-y-3 mb-4">
-                                        <input type="text" placeholder="枠の名称 (例: 水曜日 18:00-20:00)" required value={newDayLabel} onChange={e=>setNewDayLabel(e.target.value)} className="w-full p-2.5 text-sm border rounded bg-gray-50" />
-                                        <div className="flex gap-2">
-                                            <select value={newDayOfWeek} onChange={e=>setNewDayOfWeek(e.target.value)} className="w-32 p-2 text-sm border rounded bg-gray-50">
+                                    }} className="space-y-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                        <input type="text" placeholder="枠の名称 (例: 水曜日 18:00-20:00)" required value={newDayLabel} onChange={e=>setNewDayLabel(e.target.value)} className="w-full p-3 text-sm border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-gray-400 outline-none" />
+                                        <div className="flex flex-col sm:flex-row gap-3">
+                                            <select value={newDayOfWeek} onChange={e=>setNewDayOfWeek(e.target.value)} className="w-full sm:w-40 p-3 text-sm border border-gray-300 rounded-xl bg-white outline-none focus:ring-2 focus:ring-gray-400">
                                                 <option value="0">日曜日</option><option value="1">月曜日</option><option value="2">火曜日</option><option value="3">水曜日</option><option value="4">木曜日</option><option value="5">金曜日</option><option value="6">土曜日</option>
                                             </select>
-                                            <label className="flex-1 flex items-center justify-center gap-2 text-sm bg-gray-50 p-2 rounded cursor-pointer border"><input type="checkbox" checked={newDayIsVoteable} onChange={e=>setNewDayIsVoteable(e.target.checked)} className="w-4 h-4 accent-indigo-600" />義務日（投票対象）にする</label>
-                                            <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded font-bold text-sm">追加</button>
+                                            <label className="flex-1 flex items-center justify-center gap-2 text-sm bg-white p-3 rounded-xl border border-gray-300 cursor-pointer hover:bg-gray-50 transition"><input type="checkbox" checked={newDayIsVoteable} onChange={e=>setNewDayIsVoteable(e.target.checked)} className="w-4 h-4 accent-gray-700" />義務日（投票対象）にする</label>
+                                            <button type="submit" className="bg-gray-800 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md hover:bg-gray-900 transition">追加</button>
                                         </div>
                                     </form>
-                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
                                         {dayTypes.map(dt => {
                                             const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
                                             return (
-                                                <div key={dt.id} className="flex justify-between items-center p-2.5 bg-gray-50 text-sm rounded border">
+                                                <div key={dt.id} className="flex justify-between items-center p-3.5 bg-white text-sm rounded-xl border-2 border-gray-100 hover:border-gray-300 transition">
                                                     <div>
                                                         <span className="font-bold text-gray-800">{dt.label}</span>
-                                                        <span className="text-xs text-gray-500 ml-2">({dayNames[dt.dayOfWeek]}曜)</span>
-                                                        {dt.isVoteable && <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-bold ml-2">投票対象</span>}
+                                                        <span className="text-xs text-gray-500 ml-2 font-medium bg-gray-100 px-2 py-0.5 rounded">({dayNames[dt.dayOfWeek]}曜)</span>
+                                                        {dt.isVoteable && <span className="text-[10px] bg-yellow-100 text-yellow-800 border border-yellow-200 px-2 py-0.5 rounded-md font-bold ml-2">投票対象</span>}
                                                     </div>
                                                     <button onClick={async ()=>{
+                                                        if(!auth.currentUser) return;
                                                         const newList = dayTypes.filter(d => d.id !== dt.id);
-                                                        await db.collection('settings').doc('dayTypes').set({ list: newList });
-                                                    }} className="text-red-400 hover:text-red-600 p-1"><Icons.Trash2 className="w-4 h-4" /></button>
+                                                        await setDoc(getDocRef('settings', 'dayTypes'), { list: newList });
+                                                    }} className="text-red-400 hover:text-red-600 bg-red-50 p-1.5 rounded-lg"><Icons.Trash2 className="w-4 h-4" /></button>
                                                 </div>
                                             );
                                         })}
                                     </div>
                                 </div>
 
-                                {/* 日別出欠状況（欠席理由表示付き） */}
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                                    <h2 className="text-lg font-bold mb-4 flex justify-between items-center border-b pb-2 cursor-pointer" onClick={()=>setIsDailyAttExpanded(!isDailyAttExpanded)}>
-                                        <span className="flex items-center gap-2 text-emerald-700"><Icons.Calendar className="w-5 h-5" />日別出欠状況</span>
+                                {/* Daily Attendance */}
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                                    <h2 className="text-lg font-bold mb-4 flex justify-between items-center border-b pb-3 cursor-pointer hover:text-emerald-600 transition" onClick={()=>setIsDailyAttExpanded(!isDailyAttExpanded)}>
+                                        <span className="flex items-center gap-2 text-emerald-700"><Icons.Calendar className="w-6 h-6" />日別出欠状況</span>
                                         <div className="flex items-center gap-3">
-                                            <select value={adminSelectedMonth} onChange={e=>{e.stopPropagation();setAdminSelectedMonth(e.target.value);}} className="text-sm border p-1 rounded font-bold"><option value="2026-07">2026-07</option><option value="2026-08">2026-08</option></select>
-                                            {isDailyAttExpanded ? <Icons.ChevronUp className="w-5 h-5" /> : <Icons.ChevronDown className="w-5 h-5" />}
+                                            <select value={adminSelectedMonth} onChange={e=>{e.stopPropagation();setAdminSelectedMonth(e.target.value);}} className="text-sm border-2 border-emerald-200 bg-emerald-50 text-emerald-800 p-1.5 rounded-lg font-bold outline-none"><option value="2026-07">2026-07</option><option value="2026-08">2026-08</option></select>
+                                            <div className="bg-gray-100 p-1 rounded-full">{isDailyAttExpanded ? <Icons.ChevronUp className="w-5 h-5 text-gray-600" /> : <Icons.ChevronDown className="w-5 h-5 text-gray-600" />}</div>
                                         </div>
                                     </h2>
                                     {isDailyAttExpanded && (
-                                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                                        <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 mt-4">
+                                            {eventsByMonth[adminSelectedMonth]?.length === 0 ? <p className="text-center text-sm text-gray-500 py-4">データがありません</p> : null}
                                             {eventsByMonth[adminSelectedMonth]?.map(ev => {
                                                 const atts = []; const hopes = []; const abss = [];
                                                 Object.keys(users).filter(uid=>users[uid] && users[uid].role==='user').forEach(uid => {
@@ -1000,18 +1078,18 @@
                                                     if(s==='欠席') abss.push({ name: users[uid].name, reason: r });
                                                 });
                                                 return (
-                                                    <div key={ev.id} className="p-3 border rounded bg-gray-50 text-sm">
-                                                        <div className="font-bold border-b pb-1 mb-2">{ev.label}</div>
-                                                        <div className="grid grid-cols-3 gap-2">
-                                                            <div className="bg-white p-2 rounded border"><div className="text-green-700 font-bold text-xs mb-1">出席: {atts.length}</div><div className="text-[10px] text-gray-600">{atts.join(', ') || '-'}</div></div>
-                                                            <div className="bg-white p-2 rounded border"><div className="text-blue-700 font-bold text-xs mb-1">希望: {hopes.length}</div><div className="text-[10px] text-gray-600">{hopes.join(', ') || '-'}</div></div>
-                                                            <div className="bg-white p-2 rounded border">
-                                                                <div className="text-red-700 font-bold text-xs mb-1">欠席: {abss.length}</div>
-                                                                <div className="space-y-1">
-                                                                    {abss.length === 0 ? <div className="text-[10px] text-gray-600">-</div> : abss.map((a, i) => (
-                                                                        <div key={i} className="text-[10px] text-gray-700 border-b border-gray-100 last:border-0 pb-1">
-                                                                            <span className="font-bold">{a.name}</span>
-                                                                            {a.reason && <span className="block text-red-600 bg-red-50 p-1 rounded mt-0.5 whitespace-pre-wrap">理由: {a.reason}</span>}
+                                                    <div key={ev.id} className="p-4 border border-gray-200 rounded-xl bg-gray-50 shadow-sm text-sm">
+                                                        <div className="font-bold border-b border-gray-200 pb-2 mb-3 text-gray-800 text-[15px]">{ev.label}</div>
+                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                            <div className="bg-white p-3 rounded-xl border border-green-100 shadow-sm"><div className="text-green-700 font-bold text-xs mb-1.5 border-b border-green-50 pb-1">出席: {atts.length}名</div><div className="text-[11px] text-gray-600 leading-relaxed">{atts.join(', ') || '-'}</div></div>
+                                                            <div className="bg-white p-3 rounded-xl border border-blue-100 shadow-sm"><div className="text-blue-700 font-bold text-xs mb-1.5 border-b border-blue-50 pb-1">希望: {hopes.length}名</div><div className="text-[11px] text-gray-600 leading-relaxed">{hopes.join(', ') || '-'}</div></div>
+                                                            <div className="bg-white p-3 rounded-xl border border-red-100 shadow-sm">
+                                                                <div className="text-red-700 font-bold text-xs mb-1.5 border-b border-red-50 pb-1">欠席: {abss.length}名</div>
+                                                                <div className="space-y-1.5">
+                                                                    {abss.length === 0 ? <div className="text-[11px] text-gray-600">-</div> : abss.map((a, i) => (
+                                                                        <div key={i} className="text-[11px] text-gray-700 border-b border-gray-50 last:border-0 pb-1.5">
+                                                                            <span className="font-bold block mb-0.5">{a.name}</span>
+                                                                            {a.reason && <span className="block text-red-700 bg-red-50/80 p-1.5 rounded text-[10px] whitespace-pre-wrap border border-red-100">理由: {a.reason}</span>}
                                                                         </div>
                                                                     ))}
                                                                 </div>
@@ -1024,23 +1102,29 @@
                                     )}
                                 </div>
 
-                                {/* 月間活動集計＆ベストスコア */}
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                                    <h2 className="text-lg font-bold mb-4 flex justify-between items-center border-b pb-2 cursor-pointer" onClick={()=>setIsMonthlyStatsExpanded(!isMonthlyStatsExpanded)}>
-                                        <span className="flex items-center gap-2 text-emerald-700"><Icons.BarChart2 className="w-5 h-5" />月間活動集計＆ベストスコア</span>
+                                {/* Monthly Stats */}
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                                    <h2 className="text-lg font-bold mb-4 flex justify-between items-center border-b pb-3 cursor-pointer hover:text-emerald-600 transition" onClick={()=>setIsMonthlyStatsExpanded(!isMonthlyStatsExpanded)}>
+                                        <span className="flex items-center gap-2 text-emerald-700"><Icons.BarChart2 className="w-6 h-6" />月間活動集計＆ベストスコア</span>
                                         <div className="flex items-center gap-3">
-                                            <select value={adminSelectedMonth} onChange={e=>{e.stopPropagation();setAdminSelectedMonth(e.target.value);}} className="text-sm border p-1 rounded font-bold"><option value="2026-07">2026-07</option><option value="2026-08">2026-08</option></select>
-                                            {isMonthlyStatsExpanded ? <Icons.ChevronUp className="w-5 h-5" /> : <Icons.ChevronDown className="w-5 h-5" />}
+                                            <select value={adminSelectedMonth} onChange={e=>{e.stopPropagation();setAdminSelectedMonth(e.target.value);}} className="text-sm border-2 border-emerald-200 bg-emerald-50 text-emerald-800 p-1.5 rounded-lg font-bold outline-none"><option value="2026-07">2026-07</option><option value="2026-08">2026-08</option></select>
+                                            <div className="bg-gray-100 p-1 rounded-full">{isMonthlyStatsExpanded ? <Icons.ChevronUp className="w-5 h-5 text-gray-600" /> : <Icons.ChevronDown className="w-5 h-5 text-gray-600" />}</div>
                                         </div>
                                     </h2>
                                     {isMonthlyStatsExpanded && (
-                                        <div className="overflow-x-auto">
+                                        <div className="overflow-x-auto mt-4 rounded-xl border border-gray-200 shadow-sm">
                                             <table className="w-full text-xs text-left whitespace-nowrap min-w-[800px]">
-                                                <thead className="bg-gray-100 text-gray-600">
-                                                    <tr><th className="p-2 sticky left-0 bg-gray-100 shadow-[1px_0_0_0_#e5e7eb]">名前</th><th className="p-2 text-center text-green-700 border-l">出</th><th className="p-2 text-center text-red-700">欠</th><th className="p-2 text-center text-blue-700 border-l">レンジ</th>{SCORE_TYPES.map(t=><th key={t} className="p-2 text-center border-l text-amber-700">{t.substring(0,3)}</th>)}</tr>
+                                                <thead className="bg-gray-100 text-gray-700 border-b border-gray-200">
+                                                    <tr>
+                                                        <th className="p-3 sticky left-0 bg-gray-100 shadow-[2px_0_0_0_#e5e7eb] font-bold">名前</th>
+                                                        <th className="p-3 text-center font-bold text-green-700 border-l border-gray-200 bg-green-50/50">出</th>
+                                                        <th className="p-3 text-center font-bold text-red-700 bg-red-50/50">欠</th>
+                                                        <th className="p-3 text-center font-bold text-blue-700 border-l border-gray-200 bg-blue-50/50">レンジ</th>
+                                                        {SCORE_TYPES.map(t=><th key={t} className="p-3 text-center border-l border-gray-200 bg-amber-50/50 text-amber-800 font-bold">{t.substring(0,3)}</th>)}
+                                                    </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-gray-100">
-                                                    {Object.values(users).filter(u=>u.role==='user').sort((a,b)=>a.id.localeCompare(b.id)).map(u => {
+                                                <tbody className="divide-y divide-gray-100 bg-white">
+                                                    {Object.values(users).filter(u=>u.role==='user').sort((a,b)=>a.id.localeCompare(b.id)).map((u, idx) => {
                                                         let attC=0; let absC=0;
                                                         (eventsByMonth[adminSelectedMonth]||[]).forEach(ev => {
                                                             const isMan = isMandatoryEvent(u.id, ev);
@@ -1050,12 +1134,12 @@
                                                         });
                                                         const pracs = (practices[u.id]||[]).filter(p=>p.type==='ゴルフレンジ'&&p.date.startsWith(adminSelectedMonth));
                                                         return (
-                                                            <tr key={u.id} className="hover:bg-gray-50">
-                                                                <td className="p-2 font-bold sticky left-0 bg-white shadow-[1px_0_0_0_#e5e7eb]">{u.name}</td>
-                                                                <td className="p-2 text-center border-l bg-green-50/50 font-bold text-green-700">{attC}</td>
-                                                                <td className="p-2 text-center bg-red-50/50 font-bold text-red-700">{absC}</td>
-                                                                <td className="p-2 text-center border-l bg-blue-50/50 text-blue-700">{pracs.length}回</td>
-                                                                {SCORE_TYPES.map(t => <td key={t} className="p-2 text-center border-l font-bold text-gray-700">{getBestScore(u.id, t)}</td>)}
+                                                            <tr key={u.id} className={idx % 2 === 0 ? "bg-white hover:bg-gray-50" : "bg-gray-50/50 hover:bg-gray-50"}>
+                                                                <td className="p-3 font-bold sticky left-0 shadow-[2px_0_0_0_#e5e7eb] text-gray-800 bg-inherit">{u.name}</td>
+                                                                <td className="p-3 text-center border-l border-gray-100 font-bold text-green-700">{attC}</td>
+                                                                <td className="p-3 text-center font-bold text-red-700">{absC}</td>
+                                                                <td className="p-3 text-center border-l border-gray-100 text-blue-700 font-bold">{pracs.length}回</td>
+                                                                {SCORE_TYPES.map(t => <td key={t} className="p-3 text-center border-l border-gray-100 font-bold text-gray-700 bg-amber-50/10">{getBestScore(u.id, t)}</td>)}
                                                             </tr>
                                                         );
                                                     })}
@@ -1065,34 +1149,34 @@
                                     )}
                                 </div>
 
-                                {/* 部員の建て替え記録 */}
-                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-emerald-700 border-b pb-2"><Icons.Banknote className="w-5 h-5" /> 部員の建て替え記録</h2>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-xs text-left whitespace-nowrap">
-                                            <thead className="bg-emerald-50 text-emerald-800">
+                                {/* Advance Records (Admin view) */}
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-emerald-700 border-b pb-3"><Icons.Banknote className="w-6 h-6" /> 部員の建て替え記録</h2>
+                                    <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+                                        <table className="w-full text-sm text-left whitespace-nowrap min-w-[600px]">
+                                            <thead className="bg-emerald-50 text-emerald-900 border-b border-emerald-100">
                                                 <tr>
-                                                    <th className="p-2 rounded-tl-lg">記録日</th>
-                                                    <th className="p-2">部員名</th>
-                                                    <th className="p-2">対象イベント・部活</th>
-                                                    <th className="p-2 text-right">人数</th>
-                                                    <th className="p-2 text-right">金額</th>
-                                                    <th className="p-2 text-center rounded-tr-lg">操作</th>
+                                                    <th className="p-3 font-bold">記録日</th>
+                                                    <th className="p-3 font-bold">部員名</th>
+                                                    <th className="p-3 font-bold">対象イベント・部活</th>
+                                                    <th className="p-3 text-right font-bold">人数</th>
+                                                    <th className="p-3 text-right font-bold">金額</th>
+                                                    <th className="p-3 text-center font-bold">操作</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-gray-100">
+                                            <tbody className="divide-y divide-gray-100 bg-white">
                                                 {advances.length === 0 ? (
-                                                    <tr><td colSpan="6" className="p-4 text-center text-gray-500">記録はありません</td></tr>
+                                                    <tr><td colSpan="6" className="p-6 text-center text-gray-500">記録はありません</td></tr>
                                                 ) : (
-                                                    advances.map(adv => (
-                                                        <tr key={adv.id} className="hover:bg-gray-50">
-                                                            <td className="p-2 text-gray-500">{new Date(adv.createdAt).toLocaleDateString('ja-JP')}</td>
-                                                            <td className="p-2 font-bold">{users[adv.userId]?.name || '不明なユーザー'}</td>
-                                                            <td className="p-2 text-gray-700">{adv.eventLabel}</td>
-                                                            <td className="p-2 text-right font-bold">{adv.headcount}人</td>
-                                                            <td className="p-2 text-right font-bold text-emerald-700">{adv.amount.toLocaleString()}円</td>
-                                                            <td className="p-2 text-center">
-                                                                <button onClick={() => db.collection('advances').doc(adv.id).delete()} className="text-red-400 hover:text-red-600 p-1"><Icons.Trash2 className="w-4 h-4" /></button>
+                                                    advances.map((adv, idx) => (
+                                                        <tr key={adv.id} className={idx % 2 === 0 ? "hover:bg-emerald-50/30" : "bg-gray-50/50 hover:bg-emerald-50/30"}>
+                                                            <td className="p-3 text-gray-500 text-xs">{new Date(adv.createdAt).toLocaleDateString('ja-JP')}</td>
+                                                            <td className="p-3 font-bold text-gray-800">{users[adv.userId]?.name || '不明なユーザー'}</td>
+                                                            <td className="p-3 text-gray-700">{adv.eventLabel}</td>
+                                                            <td className="p-3 text-right font-bold text-gray-700">{adv.headcount}人</td>
+                                                            <td className="p-3 text-right font-bold text-emerald-700">{adv.amount.toLocaleString()}円</td>
+                                                            <td className="p-3 text-center">
+                                                                <button onClick={() => auth.currentUser && deleteDoc(getDocRef('advances', adv.id))} className="text-red-400 hover:text-red-600 bg-red-50 p-1.5 rounded-lg border border-red-100 shadow-sm"><Icons.Trash2 className="w-4 h-4" /></button>
                                                             </td>
                                                         </tr>
                                                     ))
@@ -1106,37 +1190,42 @@
 
                         {}
                         {activeTab === 'admin_users' && (
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                                <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2"><Icons.Users className="w-5 h-5" />部員管理</h2>
+                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                                <h2 className="text-lg font-bold mb-5 border-b pb-2 flex items-center gap-2 text-indigo-800"><Icons.Users className="w-6 h-6" />部員管理</h2>
                                 <form onSubmit={async(e)=>{
                                     e.preventDefault();
+                                    if(!auth.currentUser) return;
                                     const nid = newUserKana.replace(/\s+/g,'');
-                                    await db.collection('users').doc(nid).set({ id: nid, name: newUserName, password: generatePassword(), role: 'user' });
+                                    await setDoc(getDocRef('users', nid), { id: nid, name: newUserName, password: generatePassword(), role: 'user' });
                                     setNewUserName(''); setNewUserKana('');
-                                }} className="flex gap-2 mb-4">
-                                    <input type="text" placeholder="名前" required value={newUserName} onChange={e=>setNewUserName(e.target.value)} className="flex-1 p-2 text-sm border rounded bg-gray-50" />
-                                    <input type="text" placeholder="カナ" required value={newUserKana} onChange={e=>setNewUserKana(e.target.value)} className="flex-1 p-2 text-sm border rounded bg-gray-50" />
-                                    <button type="submit" className="bg-emerald-600 text-white px-4 rounded font-bold text-sm">追加</button>
+                                }} className="flex flex-col sm:flex-row gap-3 mb-6 bg-indigo-50/30 p-4 rounded-xl border border-indigo-100">
+                                    <input type="text" placeholder="名前 (例: 山田 太郎)" required value={newUserName} onChange={e=>setNewUserName(e.target.value)} className="flex-1 p-3 text-sm border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                    <input type="text" placeholder="カナID (例: ヤマダタロウ)" required value={newUserKana} onChange={e=>setNewUserKana(e.target.value)} className="flex-1 p-3 text-sm border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                    <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 transition">追加</button>
                                 </form>
-                                <div className="space-y-2">
+                                
+                                <div className="space-y-3">
                                     {Object.values(users).sort((a,b)=>a.id.localeCompare(b.id)).map(u => (
-                                        <div key={u.id} className="p-3 bg-gray-50 rounded border text-sm flex justify-between items-center">
+                                        <div key={u.id} className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm text-sm flex justify-between items-center hover:border-indigo-200 transition">
                                             {editingUser?.id === u.id ? (
-                                                <form onSubmit={handleUpdateUser} className="flex-1 flex gap-2 mr-2">
-                                                    <input type="text" required value={editUserName} onChange={e=>setEditUserName(e.target.value)} className="flex-1 p-1 border rounded" />
-                                                    <input type="text" required value={editUserPass} onChange={e=>setEditUserPass(e.target.value)} className="w-24 p-1 border rounded font-mono text-xs" />
-                                                    <button type="submit" className="bg-blue-600 text-white px-2 rounded text-xs font-bold">保存</button>
-                                                    <button type="button" onClick={()=>setEditingUser(null)} className="bg-gray-400 text-white px-2 rounded text-xs font-bold">取消</button>
+                                                <form onSubmit={handleUpdateUser} className="flex-1 flex flex-wrap gap-3 mr-2">
+                                                    <input type="text" required value={editUserName} onChange={e=>setEditUserName(e.target.value)} className="flex-1 min-w-[120px] p-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                                    <input type="text" required value={editUserPass} onChange={e=>setEditUserPass(e.target.value)} className="w-28 p-2 border border-indigo-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                                    <div className="flex gap-2">
+                                                        <button type="submit" className="bg-blue-600 text-white px-4 rounded-lg text-xs font-bold shadow-sm">保存</button>
+                                                        <button type="button" onClick={()=>setEditingUser(null)} className="bg-gray-400 hover:bg-gray-500 text-white px-3 rounded-lg text-xs font-bold shadow-sm transition">取消</button>
+                                                    </div>
                                                 </form>
                                             ) : (
                                                 <>
-                                                    <div>
-                                                        <span className="font-bold mr-2">{u.name}</span>
-                                                        <span className="text-xs text-gray-500 font-mono bg-white px-1 border rounded">Pass: {u.password}</span>
+                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
+                                                        <span className="font-bold text-gray-800 text-[15px]">{u.name}</span>
+                                                        <span className="text-[11px] text-gray-500 font-mono bg-gray-100 px-2 py-1 border border-gray-200 rounded-md">Pass: {u.password}</span>
+                                                        {u.role === 'admin' && <span className="text-[10px] bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-md font-bold">管理者</span>}
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <button onClick={()=>{setEditingUser(u); setEditUserName(u.name); setEditUserPass(u.password);}} className="text-blue-500 p-1"><Icons.Edit2 className="w-4 h-4" /></button>
-                                                        {u.role !== 'admin' && <button onClick={()=>db.collection('users').doc(u.id).delete()} className="text-red-400 p-1"><Icons.Trash2 className="w-4 h-4" /></button>}
+                                                        <button onClick={()=>{setEditingUser(u); setEditUserName(u.name); setEditUserPass(u.password);}} className="text-blue-500 hover:text-blue-700 bg-blue-50 p-2 rounded-lg border border-blue-100 shadow-sm transition"><Icons.Edit2 className="w-4 h-4" /></button>
+                                                        {u.role !== 'admin' && <button onClick={()=> auth.currentUser && deleteDoc(getDocRef('users', u.id))} className="text-red-400 hover:text-red-600 bg-red-50 p-2 rounded-lg border border-red-100 shadow-sm transition"><Icons.Trash2 className="w-4 h-4" /></button>}
                                                     </div>
                                                 </>
                                             )}
@@ -1148,109 +1237,82 @@
                     </main>
 
                     {}
-                    {showPopupMessages && (() => {
-                        const displayMsgs = showPopupMessages === 'auto' ? messages.filter(m => m.showOnPopup) : messages;
-                        return (
-                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                                <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto relative shadow-xl">
-                                    <button onClick={() => setShowPopupMessages(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full p-1"><Icons.X className="w-5 h-5" /></button>
-                                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-emerald-800"><Icons.Bell className="w-6 h-6" /> お知らせ</h2>
-                                    <div className="space-y-4">
-                                        {displayMsgs.length === 0 ? (
-                                            <p className="text-sm text-gray-500 text-center py-4">現在お知らせはありません。</p>
-                                        ) : (
-                                            displayMsgs.map(msg => (
-                                                <div key={msg.id} className="p-4 bg-amber-50 border border-amber-100 rounded-xl relative">
-                                                    {msg.showOnPopup && <span className="absolute top-3 right-3 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>}
-                                                    <div className="text-xs font-bold text-amber-600 mb-1">{msg.date}</div>
-                                                    <div className="font-bold text-gray-800 mb-2 pr-6">{msg.title}</div>
-                                                    <div className="text-sm text-gray-700 whitespace-pre-wrap">{msg.content}</div>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })()}
-
-                    {}
                     {showAdvanceModal && (() => {
                         const allEvts = [...scheduleEvents, ...customEvents].sort((a,b) => b.date.localeCompare(a.date));
                         const myAdvances = advances.filter(a => a.userId === currentUser.id);
 
                         return (
-                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                                <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto relative shadow-xl">
-                                    <button onClick={() => { setShowAdvanceModal(false); setEditingAdvanceId(null); }} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full p-1"><Icons.X className="w-5 h-5" /></button>
-                                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-emerald-800"><Icons.Banknote className="w-6 h-6" /> 建て替えメモ</h2>
+                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 modal-overlay">
+                                <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto relative shadow-2xl modal-content">
+                                    <button onClick={() => { setShowAdvanceModal(false); setEditingAdvanceId(null); }} className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full p-1.5 transition"><Icons.X className="w-5 h-5" /></button>
+                                    <h2 className="text-xl font-bold mb-5 flex items-center gap-2 text-emerald-800"><Icons.Banknote className="w-6 h-6" /> 建て替えメモ</h2>
                                     
-                                    <form onSubmit={handleRecordAdvance} className="space-y-3 mb-6 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                                        <h3 className="font-bold text-sm text-emerald-800 mb-2">新しく記録する</h3>
+                                    <form onSubmit={handleRecordAdvance} className="space-y-4 mb-8 bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100 shadow-sm">
+                                        <h3 className="font-bold text-sm text-emerald-900 border-b border-emerald-200 pb-2 mb-3">新しく記録する</h3>
                                         <div>
-                                            <label className="text-xs font-bold text-gray-600 block mb-1">対象の部活・イベント</label>
-                                            <select required value={advEventId} onChange={e=>setAdvEventId(e.target.value)} className="w-full p-2.5 text-sm border border-emerald-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-emerald-500">
+                                            <label className="text-xs font-bold text-emerald-800 block mb-1.5 ml-1">対象の部活・イベント</label>
+                                            <select required value={advEventId} onChange={e=>setAdvEventId(e.target.value)} className="w-full p-3 text-sm border border-emerald-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm transition">
                                                 <option value="">選択してください</option>
                                                 {allEvts.map(evt => (
-                                                    <option key={evt.id} value={evt.id}>{evt.date} : {evt.label || evt.title}</option>
+                                                    <option key={evt.id} value={evt.id}>{evt.date.substring(5).replace('-','/')} : {evt.label || evt.title}</option>
                                                 ))}
                                             </select>
                                         </div>
-                                        <div className="flex gap-3">
+                                        <div className="flex gap-4">
                                             <div className="flex-1">
-                                                <label className="text-xs font-bold text-gray-600 block mb-1">人数（人分）</label>
-                                                <input type="number" required min="1" value={advHeadcount} onChange={e=>setAdvHeadcount(e.target.value)} className="w-full p-2.5 text-sm border border-emerald-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-emerald-500" placeholder="例: 4" />
+                                                <label className="text-xs font-bold text-emerald-800 block mb-1.5 ml-1">人数（人分）</label>
+                                                <input type="number" required min="1" value={advHeadcount} onChange={e=>setAdvHeadcount(e.target.value)} className="w-full p-3 text-sm border border-emerald-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner transition" placeholder="例: 4" />
                                             </div>
                                             <div className="flex-1">
-                                                <label className="text-xs font-bold text-gray-600 block mb-1">合計金額（円）</label>
-                                                <input type="number" required min="0" value={advAmount} onChange={e=>setAdvAmount(e.target.value)} className="w-full p-2.5 text-sm border border-emerald-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-emerald-500" placeholder="例: 2000" />
+                                                <label className="text-xs font-bold text-emerald-800 block mb-1.5 ml-1">合計金額（円）</label>
+                                                <input type="number" required min="0" value={advAmount} onChange={e=>setAdvAmount(e.target.value)} className="w-full p-3 text-sm border border-emerald-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner transition" placeholder="例: 2000" />
                                             </div>
                                         </div>
-                                        <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-2.5 rounded-lg hover:bg-emerald-700 transition">記録する</button>
+                                        <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 transition shadow-md mt-2">記録する</button>
                                     </form>
 
                                     <div>
-                                        <h3 className="font-bold text-gray-800 mb-3 border-b pb-1">あなたの記録履歴</h3>
-                                        <div className="space-y-2">
+                                        <h3 className="font-bold text-gray-800 mb-4 border-b pb-2 flex items-center gap-2"><Icons.Clock className="w-5 h-5 text-gray-400" />あなたの記録履歴</h3>
+                                        <div className="space-y-3">
                                             {myAdvances.length === 0 ? (
-                                                <p className="text-xs text-gray-500 text-center py-2">記録はありません</p>
+                                                <p className="text-xs text-gray-500 text-center py-6 bg-gray-50 rounded-xl">記録はありません</p>
                                             ) : (
                                                 myAdvances.map(adv => (
-                                                    <div key={adv.id} className="p-3 bg-gray-50 border border-gray-100 rounded-lg text-sm">
+                                                    <div key={adv.id} className="p-4 bg-white border border-gray-200 shadow-sm rounded-xl text-sm transition-all hover:border-emerald-200">
                                                         {editingAdvanceId === adv.id ? (
-                                                            <form onSubmit={(e) => handleUpdateAdvance(e, adv.id)} className="space-y-2">
-                                                                <div className="font-bold text-gray-800 text-xs">{adv.eventLabel}</div>
-                                                                <div className="flex gap-2">
+                                                            <form onSubmit={(e) => handleUpdateAdvance(e, adv.id)} className="space-y-3">
+                                                                <div className="font-bold text-emerald-800 text-xs bg-emerald-50 p-2 rounded-lg border border-emerald-100">{adv.eventLabel}</div>
+                                                                <div className="flex gap-3">
                                                                     <div className="flex-1">
-                                                                        <label className="text-[10px] text-gray-500">人数</label>
-                                                                        <input type="number" required min="1" value={editAdvHeadcount} onChange={e=>setEditAdvHeadcount(e.target.value)} className="w-full p-1 border rounded text-xs" />
+                                                                        <label className="text-[10px] font-bold text-gray-500 ml-1 block mb-1">人数</label>
+                                                                        <input type="number" required min="1" value={editAdvHeadcount} onChange={e=>setEditAdvHeadcount(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
                                                                     </div>
                                                                     <div className="flex-1">
-                                                                        <label className="text-[10px] text-gray-500">金額(円)</label>
-                                                                        <input type="number" required min="0" value={editAdvAmount} onChange={e=>setEditAdvAmount(e.target.value)} className="w-full p-1 border rounded text-xs" />
+                                                                        <label className="text-[10px] font-bold text-gray-500 ml-1 block mb-1">金額(円)</label>
+                                                                        <input type="number" required min="0" value={editAdvAmount} onChange={e=>setEditAdvAmount(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
                                                                     </div>
                                                                 </div>
-                                                                <div className="flex justify-end gap-2 pt-1">
-                                                                    <button type="button" onClick={()=>setEditingAdvanceId(null)} className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-bold">キャンセル</button>
-                                                                    <button type="submit" className="px-3 py-1 bg-emerald-600 text-white rounded text-xs font-bold">保存</button>
+                                                                <div className="flex justify-end gap-2 pt-2">
+                                                                    <button type="button" onClick={()=>setEditingAdvanceId(null)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-200 transition">キャンセル</button>
+                                                                    <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-emerald-700 transition">保存</button>
                                                                 </div>
                                                             </form>
                                                         ) : (
-                                                            <div className="flex justify-between items-center">
+                                                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                                                                 <div>
-                                                                    <div className="font-bold text-gray-800">{adv.eventLabel}</div>
-                                                                    <div className="text-[10px] text-gray-500">{new Date(adv.createdAt).toLocaleDateString('ja-JP')} 記録</div>
+                                                                    <div className="font-bold text-gray-800 mb-1">{adv.eventLabel}</div>
+                                                                    <div className="text-[10px] text-gray-500 font-medium bg-gray-100 px-2 py-0.5 rounded-md inline-block">{new Date(adv.createdAt).toLocaleDateString('ja-JP')} 記録</div>
                                                                 </div>
-                                                                <div className="flex items-center gap-3">
+                                                                <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 bg-gray-50 p-2 rounded-lg border border-gray-100 sm:bg-transparent sm:border-0 sm:p-0">
                                                                     <div className="text-right">
-                                                                        <div className="font-bold text-emerald-700">{adv.amount.toLocaleString()}円</div>
-                                                                        <div className="text-xs text-gray-600">{adv.headcount}人分</div>
+                                                                        <div className="font-bold text-emerald-700 text-lg">{adv.amount.toLocaleString()}<span className="text-xs ml-0.5 text-emerald-600 font-normal">円</span></div>
+                                                                        <div className="text-xs text-gray-500 font-medium">{adv.headcount}人分</div>
                                                                     </div>
-                                                                    <div className="flex gap-1">
-                                                                        <button onClick={() => { setEditingAdvanceId(adv.id); setEditAdvHeadcount(adv.headcount); setEditAdvAmount(adv.amount); }} className="text-blue-500 hover:text-blue-700 p-1" title="編集">
+                                                                    <div className="flex gap-1.5">
+                                                                        <button onClick={() => { setEditingAdvanceId(adv.id); setEditAdvHeadcount(adv.headcount); setEditAdvAmount(adv.amount); }} className="text-blue-500 hover:text-blue-700 bg-blue-50 p-2 rounded-lg border border-blue-100 transition" title="編集">
                                                                             <Icons.Edit2 className="w-4 h-4" />
                                                                         </button>
-                                                                        <button onClick={() => db.collection('advances').doc(adv.id).delete()} className="text-red-400 hover:text-red-600 p-1" title="削除">
+                                                                        <button onClick={() => auth.currentUser && deleteDoc(getDocRef('advances', adv.id))} className="text-red-400 hover:text-red-600 bg-red-50 p-2 rounded-lg border border-red-100 transition" title="削除">
                                                                             <Icons.Trash2 className="w-4 h-4" />
                                                                         </button>
                                                                     </div>
@@ -1270,7 +1332,7 @@
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const root = createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
