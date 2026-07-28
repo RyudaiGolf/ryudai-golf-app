@@ -233,6 +233,14 @@
             const [pracDurationCustom, setPracDurationCustom] = useState('');
             const [pracScore, setPracScore] = useState('');
             const [pracMessage, setPracMessage] = useState('');
+            
+            // Practice edit state
+            const [editingPracticeId, setEditingPracticeId] = useState(null);
+            const [editPracDate, setEditPracDate] = useState('');
+            const [editPracType, setEditPracType] = useState('');
+            const [editPracDurationOption, setEditPracDurationOption] = useState('');
+            const [editPracDurationCustom, setEditPracDurationCustom] = useState('');
+            const [editPracScore, setEditPracScore] = useState('');
 
             // Admin state
             const [adminSelectedMonth, setAdminSelectedMonth] = useState(currentMonthStr);
@@ -381,7 +389,7 @@
                     if (user.role !== 'admin') {
                         const popupMsgs = messages.filter(m => m.showOnPopup);
                         if (popupMsgs.length > 0 && !hasSeenPopup) {
-                            setShowPopupMessages('auto');
+                            setShowPopupMessages('all');
                             setHasSeenPopup(true);
                         }
                     }
@@ -461,6 +469,52 @@
                 setPracScore(''); setPracDurationCustom('');
                 setPracMessage('記録しました！');
                 setTimeout(() => setPracMessage(''), 3000);
+            };
+
+            const startEditPractice = (p) => {
+                setEditingPracticeId(p.id);
+                setEditPracDate(p.date);
+                setEditPracType(p.type);
+                if (p.type === 'ゴルフレンジ') {
+                    if (['30','60','90'].includes(String(p.duration))) {
+                        setEditPracDurationOption(String(p.duration));
+                        setEditPracDurationCustom('');
+                    } else {
+                        setEditPracDurationOption('other');
+                        setEditPracDurationCustom(String(p.duration));
+                    }
+                    setEditPracScore('');
+                } else {
+                    setEditPracScore(p.score ? String(p.score) : '');
+                    setEditPracDurationOption('60');
+                    setEditPracDurationCustom('');
+                }
+            };
+
+            const handleUpdatePractice = async (e, pracId) => {
+                e.preventDefault();
+                if (!auth.currentUser) return;
+                let duration = null; let scoreVal = null;
+                if (editPracType === 'ゴルフレンジ') {
+                    duration = editPracDurationOption === 'other' ? parseInt(editPracDurationCustom, 10) : parseInt(editPracDurationOption, 10);
+                } else if (SCORE_TYPES.includes(editPracType) && editPracScore) {
+                    scoreVal = parseInt(editPracScore, 10);
+                }
+                
+                const ref = getDocRef('practices', currentUser.id);
+                const records = practices[currentUser.id] || [];
+                const newRecords = records.map(p => p.id === pracId ? { ...p, date: editPracDate, type: editPracType, duration, score: scoreVal } : p);
+                
+                await setDoc(ref, { records: newRecords }, { merge: true });
+                setEditingPracticeId(null);
+            };
+
+            const handleDeletePractice = async (pracId) => {
+                if (!auth.currentUser) return;
+                const ref = getDocRef('practices', currentUser.id);
+                const records = practices[currentUser.id] || [];
+                const newRecords = records.filter(p => p.id !== pracId);
+                await setDoc(ref, { records: newRecords }, { merge: true });
             };
 
             const handleUpdateUser = async (e) => {
@@ -612,6 +666,28 @@
                             </div>
                         </div>
                     </header>
+
+                    {showPopupMessages && (
+                        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 modal-overlay">
+                            <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto relative shadow-2xl modal-content">
+                                <button onClick={() => setShowPopupMessages(false)} className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full p-1.5 transition"><Icons.X className="w-5 h-5" /></button>
+                                <h2 className="text-xl font-bold mb-5 flex items-center gap-2 text-amber-600"><Icons.Bell className="w-6 h-6" /> お知らせ</h2>
+                                <div className="space-y-4">
+                                    {messages.length === 0 ? (
+                                        <p className="text-sm text-gray-500 text-center py-4">現在お知らせはありません</p>
+                                    ) : (
+                                        messages.map(msg => (
+                                            <div key={msg.id} className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                                                <div className="text-xs font-bold text-amber-600 mb-1">{msg.date}</div>
+                                                <div className="font-bold text-gray-800 mb-2">{msg.title}</div>
+                                                <div className="text-sm text-gray-700 whitespace-pre-wrap">{msg.content}</div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <main className="max-w-3xl mx-auto px-4 py-6">
                         <div className="flex space-x-1 sm:space-x-2 mb-8 bg-gray-200/60 p-1 rounded-xl overflow-x-auto hide-scrollbar">
@@ -869,7 +945,7 @@
                                         </button>
                                     ))}
                                 </div>
-                                <p className="text-sm text-gray-600 mb-6 border-b pb-4 leading-relaxed">対象月 ({selectedVoteMonth.replace('-','年')}月) に週1回必ず参加する曜日を選んでください。<br/>※月ごとの固定となります。</p>
+                                <p className="text-sm text-gray-600 mb-6 border-b pb-4 leading-relaxed">対象月 ({selectedVoteMonth.replace('-','年')}月) に週1回必ず参加する曜日を選んでください。<br/>※月ごとの固定となります。いつでも変更可能です。</p>
                                 
                                 <div className="space-y-3 mb-6">
                                     {dayTypes.filter(d => d.isVoteable).map(day => {
@@ -992,14 +1068,56 @@
                                             <p className="text-sm text-gray-500 text-center py-4 bg-gray-50 rounded-xl">記録がありません。</p>
                                         ) : (
                                             (practices[currentUser.id] || []).slice(0, 10).map(p => (
-                                                <div key={p.id} className="flex justify-between items-center p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm transition-colors hover:bg-gray-100">
-                                                    <div>
-                                                        <div className="text-[11px] text-gray-500 font-bold mb-0.5">{p.date}</div>
-                                                        <div className="font-bold text-gray-800">{p.type}</div>
-                                                    </div>
-                                                    <div className="font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
-                                                        {p.type === 'ゴルフレンジ' ? `${p.duration}分` : (p.score ? `スコア: ${p.score}` : '未入力')}
-                                                    </div>
+                                                <div key={p.id} className="p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm transition-colors hover:bg-gray-100">
+                                                    {editingPracticeId === p.id ? (
+                                                        <form onSubmit={(e) => handleUpdatePractice(e, p.id)} className="space-y-3">
+                                                            <div className="flex gap-2">
+                                                                <input type="date" required value={editPracDate} onChange={e=>setEditPracDate(e.target.value)} className="w-1/2 p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+                                                                <select value={editPracType} onChange={e=>setEditPracType(e.target.value)} className="w-1/2 p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                                                    {PRACTICE_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                                                                </select>
+                                                            </div>
+                                                            {editPracType === 'ゴルフレンジ' ? (
+                                                                <div className="flex gap-2">
+                                                                    <select value={editPracDurationOption} onChange={e=>setEditPracDurationOption(e.target.value)} className="w-1/2 p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                                                        <option value="30">30分</option><option value="60">60分</option><option value="90">90分</option><option value="other">その他</option>
+                                                                    </select>
+                                                                    {editPracDurationOption === 'other' && <input type="number" placeholder="分" required value={editPracDurationCustom} onChange={e=>setEditPracDurationCustom(e.target.value)} className="w-1/2 p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500" />}
+                                                                </div>
+                                                            ) : (
+                                                                <input type="number" placeholder="スコアを入力" value={editPracScore} onChange={e=>setEditPracScore(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+                                                            )}
+                                                            <div className="flex justify-end gap-2 pt-2">
+                                                                <button type="button" onClick={()=>setEditingPracticeId(null)} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-300 transition">キャンセル</button>
+                                                                <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-emerald-700 transition">保存</button>
+                                                            </div>
+                                                        </form>
+                                                    ) : (
+                                                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                                                            <div className="flex justify-between w-full sm:w-auto items-center">
+                                                                <div>
+                                                                    <div className="text-[11px] text-gray-500 font-bold mb-0.5">{p.date}</div>
+                                                                    <div className="font-bold text-gray-800">{p.type}</div>
+                                                                </div>
+                                                                <div className="font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 sm:hidden">
+                                                                    {p.type === 'ゴルフレンジ' ? `${p.duration}分` : (p.score ? `スコア: ${p.score}` : '未入力')}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center justify-end gap-4 shrink-0 border-t border-gray-200 pt-3 sm:border-0 sm:pt-0">
+                                                                <div className="font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 hidden sm:block">
+                                                                    {p.type === 'ゴルフレンジ' ? `${p.duration}分` : (p.score ? `スコア: ${p.score}` : '未入力')}
+                                                                </div>
+                                                                <div className="flex gap-1.5">
+                                                                    <button onClick={() => startEditPractice(p)} className="text-blue-500 hover:text-blue-700 bg-blue-50 p-2 rounded-lg border border-blue-100 transition" title="編集">
+                                                                        <Icons.Edit2 className="w-4 h-4" />
+                                                                    </button>
+                                                                    <button onClick={() => handleDeletePractice(p.id)} className="text-red-400 hover:text-red-600 bg-red-50 p-2 rounded-lg border border-red-100 transition" title="削除">
+                                                                        <Icons.Trash2 className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))
                                         )}
