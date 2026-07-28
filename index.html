@@ -73,7 +73,7 @@
             { id: 'mon1', label: '月曜日 17:00-18:30', dayOfWeek: 1, isVoteable: true },
             { id: 'mon2', label: '月曜日 20:00-21:30', dayOfWeek: 1, isVoteable: true },
             { id: 'tue1', label: '火曜日 17:00-18:30', dayOfWeek: 2, isVoteable: true },
-            { id: 'thu_short', label: '木曜日 17:30- ショートコース', dayOfWeek: 4, isVoteable: false }, // 希望参加のみ
+            { id: 'thu_short', label: '木曜日 17:30- ショートコース', dayOfWeek: 4, isVoteable: false },
             { id: 'thu1', label: '木曜日 20:00-21:30', dayOfWeek: 4, isVoteable: true },
             { id: 'fri1', label: '金曜日 17:00-18:30', dayOfWeek: 5, isVoteable: true },
             { id: 'sat1', label: '土曜日 9:30-11:00', dayOfWeek: 6, isVoteable: true },
@@ -91,7 +91,6 @@
                 const dayOfWeek = currentDate.getDay();
                 const dateStr = currentDate.toISOString().split('T')[0];
                 const monthStr = dateStr.substring(0, 7);
-                // eslint-disable-next-line no-loop-func
                 dTypes.forEach(dt => {
                     if (dt.dayOfWeek === dayOfWeek) {
                         let startTimeStr = '00:00';
@@ -142,18 +141,23 @@
             const [eventAttendance, setEventAttendance] = useState({});
             const [dayTypes, setDayTypes] = useState(DEFAULT_DAY_TYPES);
             const [scheduleEvents, setScheduleEvents] = useState([]);
-            const [advances, setAdvances] = useState([]); // 建て替え記録
+            const [advances, setAdvances] = useState([]);
 
             // UIステート
             const [showLoginMessages, setShowLoginMessages] = useState(false);
             const [showPopupMessages, setShowPopupMessages] = useState(false);
-            const [showAdvanceModal, setShowAdvanceModal] = useState(false); // お札モーダル
+            const [showAdvanceModal, setShowAdvanceModal] = useState(false);
             const [hasSeenPopup, setHasSeenPopup] = useState(false);
             const [expandedMonths, setExpandedMonths] = useState({ '2026-07': false, '2026-08': true });
             const [expandedEvent, setExpandedEvent] = useState(null);
             const [expandedCustomEvent, setExpandedCustomEvent] = useState(null);
             const [isDailyAttExpanded, setIsDailyAttExpanded] = useState(false);
             const [isMonthlyStatsExpanded, setIsMonthlyStatsExpanded] = useState(false);
+
+            // 建て替え編集用
+            const [editingAdvanceId, setEditingAdvanceId] = useState(null);
+            const [editAdvHeadcount, setEditAdvHeadcount] = useState('');
+            const [editAdvAmount, setEditAdvAmount] = useState('');
 
             // 投票関連
             const [selectedVoteMonth, setSelectedVoteMonth] = useState('2026-08');
@@ -195,11 +199,6 @@
             const [advEventId, setAdvEventId] = useState('');
             const [advHeadcount, setAdvHeadcount] = useState('');
             const [advAmount, setAdvAmount] = useState('');
-            
-            // 編集用ステート
-            const [editingAdvanceId, setEditingAdvanceId] = useState(null);
-            const [editAdvHeadcount, setEditAdvHeadcount] = useState('');
-            const [editAdvAmount, setEditAdvAmount] = useState('');
 
             // 練習枠追加関連
             const [newDayLabel, setNewDayLabel] = useState('');
@@ -288,11 +287,13 @@
                     setCurrentUser(user);
                     setActiveTab(user.role === 'admin' ? 'admin_data' : 'events');
                     
-                    const popupMsgs = messages.filter(m => m.showOnPopup);
-                    // 管理者以外の場合のみポップアップを表示
-                    if (user.role !== 'admin' && popupMsgs.length > 0 && !hasSeenPopup) {
-                        setShowPopupMessages('auto');
-                        setHasSeenPopup(true);
+                    // 管理者の場合はお知らせポップアップを表示しない
+                    if (user.role !== 'admin') {
+                        const popupMsgs = messages.filter(m => m.showOnPopup);
+                        if (popupMsgs.length > 0 && !hasSeenPopup) {
+                            setShowPopupMessages('auto');
+                            setHasSeenPopup(true);
+                        }
                     }
                 } else {
                     setLoginError('IDまたはパスワードが違います');
@@ -344,8 +345,6 @@
 
             const toggleEventAttendance = async (eventId, status) => {
                 const ref = db.collection('event_attendance').doc(currentUser.id);
-                const docSnap = await ref.get();
-                const data = docSnap.exists ? docSnap.data() : {};
                 await ref.set({ [eventId]: { status } }, { merge: true });
             };
 
@@ -398,6 +397,16 @@
                 });
                 
                 setAdvEventId(''); setAdvHeadcount(''); setAdvAmount('');
+            };
+
+            const handleUpdateAdvance = async (e, id) => {
+                e.preventDefault();
+                if (!editAdvHeadcount || !editAdvAmount) return;
+                await db.collection('advances').doc(id).update({
+                    headcount: parseInt(editAdvHeadcount, 10),
+                    amount: parseInt(editAdvAmount, 10)
+                });
+                setEditingAdvanceId(null);
             };
 
             if (!isFirebaseReady) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-500">データを読み込み中...</div>;
@@ -641,7 +650,7 @@
                                                             const isPast = isEventPast(event.endTime);
                                                             const isHoliday = isDateInHoliday(event.date);
                                                             const isMandatory = isMandatoryEvent(currentUser.id, event);
-                                                            const isExempt = !!votes[currentUser.id]?.[`${monthStr}_exempt`];
+                                                            const isExempt = votes[currentUser.id]?.[`${monthStr}_exempt`];
                                                             const needsReason = isMandatory && !isExempt;
                                                             const myAtt = attendance[currentUser.id]?.[event.id] || {};
 
@@ -650,14 +659,14 @@
                                                             const absentees = Object.keys(users).filter(uid => users[uid] && users[uid].role === 'user' && (attendance[uid]?.[event.id]?.status === '欠席')).map(uid => users[uid].name);
 
                                                             return (
-                                                                <div key={event.id} className={`p-3.5 rounded-xl border-2 transition-all ${isPast ? 'bg-gray-100 border-gray-200 opacity-70' : isHoliday ? 'bg-blue-50/50 border-blue-100' : isMandatory ? 'bg-yellow-50 border-yellow-400' : 'bg-white border-gray-100'}`}>
+                                                                <div key={event.id} className={`p-3.5 rounded-xl border-2 transition-all ${isPast ? 'bg-gray-100 border-gray-200 opacity-70' : isHoliday ? 'bg-blue-50/50 border-blue-200' : isMandatory ? 'bg-yellow-50 border-yellow-400' : 'bg-white border-gray-100'}`}>
                                                                     <div className="flex flex-col sm:flex-row justify-between gap-3">
                                                                         <div>
                                                                             <div className="font-bold flex items-center gap-2 text-gray-800">
                                                                                 {event.label}
                                                                                 {isPast && <span className="text-[10px] bg-gray-200 px-2 rounded-full flex items-center gap-1"><Icons.Clock className="w-3 h-3" />終了</span>}
-                                                                                {isMandatory && <span className="text-[10px] bg-yellow-400 text-yellow-900 px-2 rounded-full font-bold">義務日</span>}
-                                                                                {isHoliday && <span className="text-[10px] bg-blue-500 text-white px-2 rounded-full font-bold">長期休み</span>}
+                                                                                {isHoliday && <span className="text-[10px] bg-blue-100 text-blue-800 px-2 rounded-full font-bold">長期休み</span>}
+                                                                                {isMandatory && !isHoliday && <span className="text-[10px] bg-yellow-400 text-yellow-900 px-2 rounded-full font-bold">義務日</span>}
                                                                             </div>
                                                                         </div>
                                                                         <div className="flex gap-2">
@@ -730,6 +739,7 @@
                             </div>
                         )}
 
+                        {}
                         {activeTab === 'voting' && (
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                 <h2 className="text-xl font-bold text-emerald-800 mb-2">義務日の申告</h2>
@@ -743,7 +753,7 @@
                                         
                                         const votedUserIds = Object.keys(votes).filter(uid => users[uid] && users[uid].role === 'user' && votes[uid][selectedVoteMonth] === day.id);
                                         const sortedVotedUsers = votedUserIds.sort((a,b)=>a.localeCompare(b)).map(uid => {
-                                            const isUserExempt = !!votes[uid]?.[`${selectedVoteMonth}_exempt`];
+                                            const isUserExempt = votes[uid]?.[`${selectedVoteMonth}_exempt`];
                                             return users[uid].name + (isUserExempt ? '(免除)' : '');
                                         });
 
@@ -772,7 +782,7 @@
                                 {(() => {
                                     const isMonthStarted = new Date() >= new Date(`${selectedVoteMonth}-01T00:00:00`);
                                     const curVote = votes[currentUser.id]?.[selectedVoteMonth];
-                                    const curExempt = !!votes[currentUser.id]?.[`${selectedVoteMonth}_exempt`];
+                                    const curExempt = votes[currentUser.id]?.[`${selectedVoteMonth}_exempt`];
                                     const isUnchanged = curVote === selectedVoteDay && curExempt === isExemptChecked;
                                     
                                     return (
@@ -809,14 +819,15 @@
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                                     <h2 className="text-lg font-bold text-emerald-800 mb-4 flex items-center gap-2"><Icons.Activity className="w-5 h-5" />自主練を記録する</h2>
                                     <form onSubmit={handleRecordPractice} className="space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
+                                        {/* スマホで縦並びになるよう grid-cols-1 sm:grid-cols-2 に設定 */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="text-xs font-bold text-gray-500 mb-1 block">日付</label>
-                                                <input type="date" required value={pracDate} onChange={e=>setPracDate(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50" />
+                                                <input type="date" required value={pracDate} onChange={e=>setPracDate(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 text-sm" />
                                             </div>
                                             <div>
                                                 <label className="text-xs font-bold text-gray-500 mb-1 block">種類</label>
-                                                <select value={pracType} onChange={e=>setPracType(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50">
+                                                <select value={pracType} onChange={e=>setPracType(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 text-sm">
                                                     {PRACTICE_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                                                 </select>
                                             </div>
@@ -824,15 +835,15 @@
                                         {pracType === 'ゴルフレンジ' ? (
                                             <div>
                                                 <label className="text-xs font-bold text-gray-500 mb-1 block">時間（分）</label>
-                                                <select value={pracDurationOption} onChange={e=>setPracDurationOption(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 mb-2">
+                                                <select value={pracDurationOption} onChange={e=>setPracDurationOption(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 text-sm mb-2">
                                                     <option value="30">30分</option><option value="60">60分</option><option value="90">90分</option><option value="other">その他</option>
                                                 </select>
-                                                {pracDurationOption === 'other' && <input type="number" placeholder="分数を入力" required value={pracDurationCustom} onChange={e=>setPracDurationCustom(e.target.value)} className="w-full p-3 border rounded-xl" />}
+                                                {pracDurationOption === 'other' && <input type="number" placeholder="分数を入力" required value={pracDurationCustom} onChange={e=>setPracDurationCustom(e.target.value)} className="w-full p-3 border rounded-xl text-sm" />}
                                             </div>
                                         ) : (
                                             <div>
                                                 <label className="text-xs font-bold text-gray-500 mb-1 block">スコア（任意）</label>
-                                                <input type="number" placeholder="スコアを入力" value={pracScore} onChange={e=>setPracScore(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50" />
+                                                <input type="number" placeholder="スコアを入力" value={pracScore} onChange={e=>setPracScore(e.target.value)} className="w-full p-3 border rounded-xl bg-gray-50 text-sm" />
                                             </div>
                                         )}
                                         {pracMessage && <div className="text-sm font-bold text-emerald-600 text-center bg-emerald-50 p-2 rounded">{pracMessage}</div>}
@@ -868,29 +879,33 @@
                         {}
                         {activeTab === 'admin_data' && (
                             <div className="space-y-8">
+                                {/* 長期休みの設定 */}
                                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                                    <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2"><Icons.CalendarX2 className="w-5 h-5 text-red-500" />長期休みの設定</h2>
-                                    <p className="text-xs text-gray-500 mb-3">設定した期間内のイベントは、自動的に「義務出席なし」として扱われます。</p>
-                                    <form onSubmit={async(e)=>{
+                                    <h2 className="text-lg font-bold mb-2 flex items-center gap-2 text-indigo-700 border-b pb-2">
+                                        <Icons.CalendarX2 className="w-5 h-5" /> 長期休みの設定
+                                    </h2>
+                                    <p className="text-xs text-gray-500 mb-4">設定した期間内のイベントは、自動的に「義務出席なし」として扱われます。</p>
+                                    <form onSubmit={async (e) => {
                                         e.preventDefault();
+                                        if (!newHoliStart || !newHoliEnd) return;
                                         const id = `holi_${Date.now()}`;
-                                        await db.collection('holidays').doc(id).set({ id, label: newHoliLabel, start: newHoliStart, end: newHoliEnd });
+                                        await db.collection('holidays').doc(id).set({ id, label: newHoliLabel || '長期休み', start: newHoliStart, end: newHoliEnd });
                                         setNewHoliLabel(''); setNewHoliStart(''); setNewHoliEnd('');
                                     }} className="space-y-3 mb-4">
-                                        <input type="text" placeholder="休みの名称 (例: 夏休み)" required value={newHoliLabel} onChange={e=>setNewHoliLabel(e.target.value)} className="w-full p-2.5 text-sm border rounded bg-gray-50" />
-                                        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                                        <input type="text" placeholder="休みの名称 (例: 夏休み、テスト期間)" value={newHoliLabel} onChange={e=>setNewHoliLabel(e.target.value)} className="w-full p-2.5 text-sm border rounded bg-gray-50 focus:ring-indigo-500 outline-none" />
+                                        <div className="flex flex-col sm:flex-row gap-2 items-center">
                                             <input type="date" required value={newHoliStart} onChange={e=>setNewHoliStart(e.target.value)} className="w-full sm:w-auto flex-1 p-2.5 text-sm border rounded bg-gray-50" />
-                                            <span className="text-gray-500 font-bold hidden sm:inline">〜</span>
+                                            <span className="text-sm font-bold text-gray-400">〜</span>
                                             <input type="date" required value={newHoliEnd} onChange={e=>setNewHoliEnd(e.target.value)} className="w-full sm:w-auto flex-1 p-2.5 text-sm border rounded bg-gray-50" />
-                                            <button type="submit" className="bg-red-500 text-white px-4 py-2.5 rounded-lg font-bold text-sm shrink-0 hover:bg-red-600 transition">追加</button>
+                                            <button type="submit" className="w-full sm:w-auto bg-indigo-600 text-white font-bold px-4 py-2.5 rounded hover:bg-indigo-700 text-sm">追加</button>
                                         </div>
                                     </form>
-                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    <div className="space-y-2">
                                         {holidays.map(h => (
-                                            <div key={h.id} className="flex justify-between items-center p-2.5 bg-gray-50 text-sm rounded border">
+                                            <div key={h.id} className="flex justify-between items-center p-2.5 bg-indigo-50/50 border border-indigo-100 rounded text-sm">
                                                 <div>
-                                                    <span className="font-bold text-gray-800">{h.label}</span>
-                                                    <span className="text-xs text-gray-500 ml-2">{h.start} 〜 {h.end}</span>
+                                                    <span className="font-bold text-indigo-900 mr-2">{h.label}</span>
+                                                    <span className="text-xs text-indigo-600">{h.start} 〜 {h.end}</span>
                                                 </div>
                                                 <button onClick={()=>db.collection('holidays').doc(h.id).delete()} className="text-red-400 hover:text-red-600 p-1"><Icons.Trash2 className="w-4 h-4" /></button>
                                             </div>
@@ -898,6 +913,7 @@
                                     </div>
                                 </div>
 
+                                {/* お知らせ配信 */}
                                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
                                     <h2 className="text-lg font-bold mb-4 border-b pb-2"><Icons.Bell className="w-5 h-5 inline mr-2 text-amber-500" />全体へのお知らせ配信</h2>
                                     <form onSubmit={async(e)=>{
@@ -924,9 +940,10 @@
                                     </div>
                                 </div>
 
+                                {/* 定期練習日の追加・編集 */}
                                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
                                     <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2"><Icons.Settings className="w-5 h-5 text-indigo-500" />定期練習日の追加・編集</h2>
-                                    <p className="text-xs text-gray-500 mb-3">部活の日程が変わった際や新しい枠を作る際にここで追加・削除してください。出欠カレンダーに自動反映されます。</p>
+                                    <p className="text-xs text-gray-500 mb-3">部活の日程が変わった際や新しい枠を作る際にここで追加・削除してください。</p>
                                     <form onSubmit={async(e)=>{
                                         e.preventDefault();
                                         const id = `day_${Date.now()}`;
@@ -963,6 +980,7 @@
                                     </div>
                                 </div>
 
+                                {/* 日別出欠状況（欠席理由表示付き） */}
                                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
                                     <h2 className="text-lg font-bold mb-4 flex justify-between items-center border-b pb-2 cursor-pointer" onClick={()=>setIsDailyAttExpanded(!isDailyAttExpanded)}>
                                         <span className="flex items-center gap-2 text-emerald-700"><Icons.Calendar className="w-5 h-5" />日別出欠状況</span>
@@ -976,37 +994,38 @@
                                             {eventsByMonth[adminSelectedMonth]?.map(ev => {
                                                 const atts = []; const hopes = []; const abss = [];
                                                 Object.keys(users).filter(uid=>users[uid] && users[uid].role==='user').forEach(uid => {
-                                                    const attData = attendance[uid]?.[ev.id];
-                                                    const s = attData?.status;
+                                                    const s = attendance[uid]?.[ev.id]?.status;
+                                                    const r = attendance[uid]?.[ev.id]?.reason;
                                                     if(s==='出席') atts.push(users[uid].name);
                                                     if(s==='希望出席') hopes.push(users[uid].name);
-                                                    if(s==='欠席') abss.push({ name: users[uid].name, reason: attData?.reason || '' });
+                                                    if(s==='欠席') abss.push({ name: users[uid].name, reason: r });
                                                 });
                                                 return (
                                                     <div key={ev.id} className="p-3 border rounded bg-gray-50 text-sm">
                                                         <div className="font-bold border-b pb-1 mb-2">{ev.label}</div>
-                                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                                            <div className="bg-white p-2 rounded border"><div className="text-green-700 font-bold text-xs mb-1">出席: {atts.length}</div><div className="text-[10px] text-gray-600">{atts.join(', ')}</div></div>
-                                                            <div className="bg-white p-2 rounded border"><div className="text-blue-700 font-bold text-xs mb-1">希望: {hopes.length}</div><div className="text-[10px] text-gray-600">{hopes.join(', ')}</div></div>
+                                                        <div className="grid grid-cols-3 gap-2">
+                                                            <div className="bg-white p-2 rounded border"><div className="text-green-700 font-bold text-xs mb-1">出席: {atts.length}</div><div className="text-[10px] text-gray-600">{atts.join(', ') || '-'}</div></div>
+                                                            <div className="bg-white p-2 rounded border"><div className="text-blue-700 font-bold text-xs mb-1">希望: {hopes.length}</div><div className="text-[10px] text-gray-600">{hopes.join(', ') || '-'}</div></div>
                                                             <div className="bg-white p-2 rounded border">
                                                                 <div className="text-red-700 font-bold text-xs mb-1">欠席: {abss.length}</div>
-                                                                <div className="text-[10px] text-gray-600 space-y-1 mt-1">
-                                                                    {abss.map((a, i) => (
-                                                                        <div key={i} className="border-b border-gray-100 last:border-0 pb-1 last:pb-0">
+                                                                <div className="space-y-1">
+                                                                    {abss.length === 0 ? <div className="text-[10px] text-gray-600">-</div> : abss.map((a, i) => (
+                                                                        <div key={i} className="text-[10px] text-gray-700 border-b border-gray-100 last:border-0 pb-1">
                                                                             <span className="font-bold">{a.name}</span>
-                                                                            {a.reason && <span className="block text-gray-500 bg-gray-50 p-1 rounded mt-0.5 whitespace-pre-wrap">{a.reason}</span>}
+                                                                            {a.reason && <span className="block text-red-600 bg-red-50 p-1 rounded mt-0.5 whitespace-pre-wrap">理由: {a.reason}</span>}
                                                                         </div>
                                                                     ))}
                                                                 </div>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                )
+                                                );
                                             })}
                                         </div>
                                     )}
                                 </div>
 
+                                {/* 月間活動集計＆ベストスコア */}
                                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
                                     <h2 className="text-lg font-bold mb-4 flex justify-between items-center border-b pb-2 cursor-pointer" onClick={()=>setIsMonthlyStatsExpanded(!isMonthlyStatsExpanded)}>
                                         <span className="flex items-center gap-2 text-emerald-700"><Icons.BarChart2 className="w-5 h-5" />月間活動集計＆ベストスコア</span>
@@ -1047,6 +1066,7 @@
                                     )}
                                 </div>
 
+                                {/* 部員の建て替え記録 */}
                                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
                                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-emerald-700 border-b pb-2"><Icons.Banknote className="w-5 h-5" /> 部員の建て替え記録</h2>
                                     <div className="overflow-x-auto">
@@ -1155,6 +1175,7 @@
                         );
                     })()}
 
+                    {}
                     {showAdvanceModal && (() => {
                         const allEvts = [...scheduleEvents, ...customEvents].sort((a,b) => b.date.localeCompare(a.date));
                         const myAdvances = advances.filter(a => a.userId === currentUser.id);
@@ -1162,7 +1183,7 @@
                         return (
                             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                                 <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto relative shadow-xl">
-                                    <button onClick={() => setShowAdvanceModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full p-1"><Icons.X className="w-5 h-5" /></button>
+                                    <button onClick={() => { setShowAdvanceModal(false); setEditingAdvanceId(null); }} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full p-1"><Icons.X className="w-5 h-5" /></button>
                                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-emerald-800"><Icons.Banknote className="w-6 h-6" /> 建て替えメモ</h2>
                                     
                                     <form onSubmit={handleRecordAdvance} className="space-y-3 mb-6 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
@@ -1196,30 +1217,23 @@
                                                 <p className="text-xs text-gray-500 text-center py-2">記録はありません</p>
                                             ) : (
                                                 myAdvances.map(adv => (
-                                                    <div key={adv.id} className="p-3 bg-gray-50 border border-gray-100 rounded-lg flex flex-col gap-2 text-sm">
+                                                    <div key={adv.id} className="p-3 bg-gray-50 border border-gray-100 rounded-lg text-sm">
                                                         {editingAdvanceId === adv.id ? (
-                                                            <form onSubmit={async (e) => {
-                                                                e.preventDefault();
-                                                                await db.collection('advances').doc(adv.id).update({
-                                                                    headcount: parseInt(editAdvHeadcount, 10),
-                                                                    amount: parseInt(editAdvAmount, 10)
-                                                                });
-                                                                setEditingAdvanceId(null);
-                                                            }} className="flex flex-col gap-2">
-                                                                <div className="font-bold text-gray-800">{adv.eventLabel}</div>
+                                                            <form onSubmit={(e) => handleUpdateAdvance(e, adv.id)} className="space-y-2">
+                                                                <div className="font-bold text-gray-800 text-xs">{adv.eventLabel}</div>
                                                                 <div className="flex gap-2">
-                                                                    <div className="flex flex-col">
-                                                                        <label className="text-[10px] text-gray-500 font-bold mb-1">人数</label>
-                                                                        <input type="number" required min="1" value={editAdvHeadcount} onChange={e=>setEditAdvHeadcount(e.target.value)} className="w-16 p-1.5 border rounded text-sm outline-none focus:border-emerald-500" placeholder="人数" />
+                                                                    <div className="flex-1">
+                                                                        <label className="text-[10px] text-gray-500">人数</label>
+                                                                        <input type="number" required min="1" value={editAdvHeadcount} onChange={e=>setEditAdvHeadcount(e.target.value)} className="w-full p-1 border rounded text-xs" />
                                                                     </div>
-                                                                    <div className="flex flex-col flex-1">
-                                                                        <label className="text-[10px] text-gray-500 font-bold mb-1">金額(円)</label>
-                                                                        <input type="number" required min="0" value={editAdvAmount} onChange={e=>setEditAdvAmount(e.target.value)} className="w-full p-1.5 border rounded text-sm outline-none focus:border-emerald-500" placeholder="金額" />
+                                                                    <div className="flex-1">
+                                                                        <label className="text-[10px] text-gray-500">金額(円)</label>
+                                                                        <input type="number" required min="0" value={editAdvAmount} onChange={e=>setEditAdvAmount(e.target.value)} className="w-full p-1 border rounded text-xs" />
                                                                     </div>
                                                                 </div>
-                                                                <div className="flex gap-2 justify-end mt-1">
-                                                                    <button type="button" onClick={()=>setEditingAdvanceId(null)} className="px-3 py-1.5 bg-gray-300 text-gray-700 rounded text-xs font-bold hover:bg-gray-400">キャンセル</button>
-                                                                    <button type="submit" className="px-3 py-1.5 bg-emerald-600 text-white rounded text-xs font-bold hover:bg-emerald-700">保存</button>
+                                                                <div className="flex justify-end gap-2 pt-1">
+                                                                    <button type="button" onClick={()=>setEditingAdvanceId(null)} className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-bold">キャンセル</button>
+                                                                    <button type="submit" className="px-3 py-1 bg-emerald-600 text-white rounded text-xs font-bold">保存</button>
                                                                 </div>
                                                             </form>
                                                         ) : (
@@ -1233,15 +1247,13 @@
                                                                         <div className="font-bold text-emerald-700">{adv.amount.toLocaleString()}円</div>
                                                                         <div className="text-xs text-gray-600">{adv.headcount}人分</div>
                                                                     </div>
-                                                                    <div className="flex flex-col gap-1 border-l pl-2">
-                                                                        <button onClick={() => {
-                                                                            setEditingAdvanceId(adv.id);
-                                                                            setEditAdvHeadcount(adv.headcount);
-                                                                            setEditAdvAmount(adv.amount);
-                                                                        }} className="text-blue-500 p-1 hover:bg-blue-50 rounded transition-colors"><Icons.Edit2 className="w-4 h-4" /></button>
-                                                                        <button onClick={() => {
-                                                                            if(window.confirm('この記録を削除しますか？')) db.collection('advances').doc(adv.id).delete();
-                                                                        }} className="text-red-400 p-1 hover:bg-red-50 rounded transition-colors"><Icons.Trash2 className="w-4 h-4" /></button>
+                                                                    <div className="flex gap-1">
+                                                                        <button onClick={() => { setEditingAdvanceId(adv.id); setEditAdvHeadcount(adv.headcount); setEditAdvAmount(adv.amount); }} className="text-blue-500 hover:text-blue-700 p-1" title="編集">
+                                                                            <Icons.Edit2 className="w-4 h-4" />
+                                                                        </button>
+                                                                        <button onClick={() => db.collection('advances').doc(adv.id).delete()} className="text-red-400 hover:text-red-600 p-1" title="削除">
+                                                                            <Icons.Trash2 className="w-4 h-4" />
+                                                                        </button>
                                                                     </div>
                                                                 </div>
                                                             </div>
