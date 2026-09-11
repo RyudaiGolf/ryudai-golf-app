@@ -52,6 +52,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'golf-schedule-app';
         const defaultConfig = {
@@ -67,6 +68,7 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const storage = getStorage(app);
 
         // Required Path Helpers
         const getColPath = (colName) => `artifacts/${appId}/public/data/${colName}`;
@@ -263,6 +265,9 @@
             const [newEventTime, setNewEventTime] = useState('');
             const [newEventLoc, setNewEventLoc] = useState('');
             const [newEventDesc, setNewEventDesc] = useState('');
+            const [newEventOptions, setNewEventOptions] = useState('参加,不参加');
+            const [newEventImage, setNewEventImage] = useState(null);
+            const [isUploading, setIsUploading] = useState(false);
 
             // Advance form state
             const [advEventId, setAdvEventId] = useState('');
@@ -389,7 +394,7 @@
                     if (user.role !== 'admin') {
                         const popupMsgs = messages.filter(m => m.showOnPopup);
                         if (popupMsgs.length > 0 && !hasSeenPopup) {
-                            setShowPopupMessages('all');
+                            setShowPopupMessages('auto');
                             setHasSeenPopup(true);
                         }
                     }
@@ -655,7 +660,7 @@
                                 <button onClick={() => setShowAdvanceModal(true)} className="p-2 text-gray-500 hover:text-emerald-500 transition-colors" title="建て替えメモ">
                                     <Icons.Banknote className="w-5 h-5" />
                                 </button>
-                                <button onClick={() => setShowPopupMessages('all')} className="relative p-2 text-gray-500 hover:text-amber-500 transition-colors" title="お知らせ">
+                                <button onClick={() => setShowPopupMessages('manual')} className="relative p-2 text-gray-500 hover:text-amber-500 transition-colors" title="お知らせ">
                                     <Icons.Bell className="w-5 h-5" />
                                     {messages.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
                                 </button>
@@ -667,16 +672,18 @@
                         </div>
                     </header>
 
-                    {showPopupMessages && (
+                    {showPopupMessages && (() => {
+                        const msgsToShow = showPopupMessages === 'auto' ? messages.filter(m => m.showOnPopup) : messages;
+                        return (
                         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 modal-overlay">
                             <div className="bg-white rounded-3xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto relative shadow-2xl modal-content">
                                 <button onClick={() => setShowPopupMessages(false)} className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full p-1.5 transition"><Icons.X className="w-5 h-5" /></button>
                                 <h2 className="text-xl font-bold mb-5 flex items-center gap-2 text-amber-600"><Icons.Bell className="w-6 h-6" /> お知らせ</h2>
                                 <div className="space-y-4">
-                                    {messages.length === 0 ? (
+                                    {msgsToShow.length === 0 ? (
                                         <p className="text-sm text-gray-500 text-center py-4">現在お知らせはありません</p>
                                     ) : (
-                                        messages.map(msg => (
+                                        msgsToShow.map(msg => (
                                             <div key={msg.id} className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
                                                 <div className="text-xs font-bold text-amber-600 mb-1">{msg.date}</div>
                                                 <div className="font-bold text-gray-800 mb-2">{msg.title}</div>
@@ -687,7 +694,8 @@
                                 </div>
                             </div>
                         </div>
-                    )}
+                        );
+                    })()}
 
                     <main className="max-w-3xl mx-auto px-4 py-6">
                         <div className="flex space-x-1 sm:space-x-2 mb-8 bg-gray-200/60 p-1 rounded-xl overflow-x-auto hide-scrollbar">
@@ -715,9 +723,37 @@
                                         <form onSubmit={async (e) => {
                                             e.preventDefault();
                                             if(!auth.currentUser) return;
-                                            const eId = `ce_${Date.now()}`;
-                                            await setDoc(getDocRef('custom_events', eId), { id: eId, title: newEventTitle, date: newEventDate, time: newEventTime, location: newEventLoc, description: newEventDesc });
-                                            setNewEventTitle(''); setNewEventDate(''); setNewEventTime(''); setNewEventLoc(''); setNewEventDesc('');
+                                            setIsUploading(true);
+                                            try {
+                                                const eId = `ce_${Date.now()}`;
+                                                let imageUrl = null;
+                                                let imageStoragePath = null;
+                                                
+                                                if (newEventImage) {
+                                                    const ext = newEventImage.name.split('.').pop();
+                                                    const filePath = `artifacts/${appId}/public/images/${eId}.${ext}`;
+                                                    const fileRef = storageRef(storage, filePath);
+                                                    await uploadBytes(fileRef, newEventImage);
+                                                    imageUrl = await getDownloadURL(fileRef);
+                                                    imageStoragePath = filePath;
+                                                }
+
+                                                const optionsArray = newEventOptions.split(',').map(s => s.trim()).filter(Boolean);
+                                                if (optionsArray.length === 0) optionsArray.push('参加', '不参加');
+
+                                                await setDoc(getDocRef('custom_events', eId), { 
+                                                    id: eId, title: newEventTitle, date: newEventDate, time: newEventTime, location: newEventLoc, description: newEventDesc,
+                                                    options: optionsArray, imageUrl, imageStoragePath
+                                                });
+
+                                                setNewEventTitle(''); setNewEventDate(''); setNewEventTime(''); setNewEventLoc(''); setNewEventDesc('');
+                                                setNewEventOptions('参加,不参加'); setNewEventImage(null);
+                                            } catch (err) {
+                                                console.error(err);
+                                                alert("エラーが発生しました: " + err.message);
+                                            } finally {
+                                                setIsUploading(false);
+                                            }
                                         }} className="space-y-3">
                                             <input type="text" placeholder="イベント名 (例: 夏合宿コンペ)" required value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" />
                                             <div className="flex gap-2">
@@ -726,7 +762,20 @@
                                             </div>
                                             <input type="text" placeholder="場所 (例: 琉球ゴルフ倶楽部)" required value={newEventLoc} onChange={e=>setNewEventLoc(e.target.value)} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" />
                                             <textarea placeholder="詳細や注意事項など" rows="2" value={newEventDesc} onChange={e=>setNewEventDesc(e.target.value)} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 resize-none focus:ring-2 focus:ring-emerald-500 outline-none"></textarea>
-                                            <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 transition shadow-sm mt-2">イベントを作成する</button>
+                                            
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 ml-1 mb-1 block">選択肢 (カンマ区切り)</label>
+                                                <input type="text" placeholder="例: 参加,不参加,未定" required value={newEventOptions} onChange={e=>setNewEventOptions(e.target.value)} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                                            </div>
+                                            
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 ml-1 mb-1 block">添付画像 (任意)</label>
+                                                <input type="file" accept="image/*" onChange={e=>setNewEventImage(e.target.files[0])} className="w-full p-2.5 text-sm border rounded-lg bg-gray-50 outline-none" />
+                                            </div>
+
+                                            <button type="submit" disabled={isUploading} className="w-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 transition shadow-sm mt-2 disabled:opacity-50">
+                                                {isUploading ? '作成中...' : 'イベントを作成する'}
+                                            </button>
                                         </form>
                                     </div>
                                 )}
@@ -740,9 +789,8 @@
                                             {customEvents.map(ce => {
                                                 const isPast = new Date(`${ce.date}T23:59:00`) < new Date();
                                                 const myAtt = eventAttendance[currentUser.id]?.[ce.id]?.status;
-                                                
-                                                const attendees = Object.keys(users).filter(uid => users[uid] && users[uid].role === 'user' && (eventAttendance[uid]?.[ce.id]?.status === '参加')).map(uid => users[uid].name);
-                                                const absentees = Object.keys(users).filter(uid => users[uid] && users[uid].role === 'user' && (eventAttendance[uid]?.[ce.id]?.status === '不参加')).map(uid => users[uid].name);
+                                                const opts = ce.options || ['参加', '不参加'];
+                                                const totalAnswered = Object.keys(users).filter(uid => users[uid] && users[uid].role === 'user' && eventAttendance[uid]?.[ce.id]?.status).length;
 
                                                 return (
                                                     <div key={ce.id} className={`p-4 rounded-xl border-2 transition-all ${isPast ? 'bg-gray-50 border-gray-200 opacity-80' : 'bg-white border-amber-300 shadow-sm hover:border-amber-400'}`}>
@@ -753,23 +801,34 @@
                                                             </div>
                                                             {isPast && <span className="text-xs bg-gray-200 px-2 py-1 rounded-md font-bold text-gray-600">終了</span>}
                                                             {activeTab === 'admin_events' && (
-                                                                <button onClick={()=> auth.currentUser && deleteDoc(getDocRef('custom_events', ce.id))} className="text-red-400 hover:text-red-600 p-1 bg-red-50 rounded-lg"><Icons.Trash2 className="w-4 h-4" /></button>
+                                                                <button onClick={async ()=> {
+                                                                    if(!auth.currentUser) return;
+                                                                    if(ce.imageStoragePath) {
+                                                                        try { await deleteObject(storageRef(storage, ce.imageStoragePath)); } catch(e){}
+                                                                    }
+                                                                    await deleteDoc(getDocRef('custom_events', ce.id));
+                                                                }} className="text-red-400 hover:text-red-600 p-1 bg-red-50 rounded-lg"><Icons.Trash2 className="w-4 h-4" /></button>
                                                             )}
                                                         </div>
                                                         <div className="text-sm text-gray-600 mb-4 space-y-1.5">
                                                             <p className="flex items-center gap-1.5 font-medium"><Icons.MapPin className="w-4 h-4 text-gray-400" />{ce.location}</p>
-                                                            {ce.description && <p className="bg-gray-50 p-2.5 rounded-lg text-xs mt-2 border border-gray-100 leading-relaxed">{ce.description}</p>}
+                                                            {ce.description && <p className="bg-gray-50 p-2.5 rounded-lg text-xs mt-2 border border-gray-100 leading-relaxed whitespace-pre-wrap">{ce.description}</p>}
                                                         </div>
+                                                        
+                                                        {ce.imageUrl && (
+                                                            <div className="mb-4 rounded-xl overflow-hidden bg-gray-100 max-h-64 flex justify-center border border-gray-200">
+                                                                <img src={ce.imageUrl} alt="Event" className="max-w-full h-auto object-contain max-h-64" />
+                                                            </div>
+                                                        )}
 
                                                         {activeTab === 'events' && (
-                                                            <div className="flex gap-2 border-t pt-4 mt-2">
+                                                            <div className="flex flex-wrap gap-2 border-t pt-4 mt-2">
                                                                 {isPast ? (
                                                                     <div className="w-full text-center bg-gray-100 text-gray-500 font-bold py-2 rounded-xl text-sm">回答: {myAtt || '未回答'}</div>
                                                                 ) : (
-                                                                    <>
-                                                                        <button onClick={() => toggleEventAttendance(ce.id, '参加')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${myAtt === '参加' ? 'bg-amber-100 border-amber-500 text-amber-800 shadow-inner' : 'bg-white border-gray-200 text-gray-700 hover:border-amber-300'}`}>参加</button>
-                                                                        <button onClick={() => toggleEventAttendance(ce.id, '不参加')} className={`flex-1 py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${myAtt === '不参加' ? 'bg-red-50 border-red-400 text-red-700 shadow-inner' : 'bg-white border-gray-200 text-gray-700 hover:border-red-300'}`}>不参加</button>
-                                                                    </>
+                                                                    opts.map(opt => (
+                                                                        <button key={opt} onClick={() => toggleEventAttendance(ce.id, opt)} className={`flex-1 min-w-[80px] py-2.5 rounded-xl font-bold text-sm border-2 transition-all ${myAtt === opt ? 'bg-amber-100 border-amber-500 text-amber-800 shadow-inner' : 'bg-white border-gray-200 text-gray-700 hover:border-amber-300'}`}>{opt}</button>
+                                                                    ))
                                                                 )}
                                                             </div>
                                                         )}
@@ -778,33 +837,35 @@
                                                             <div className="mt-3 border-t border-gray-100 pt-2">
                                                                 <button onClick={() => setExpandedCustomEvent(expandedCustomEvent === ce.id ? null : ce.id)} className="flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-emerald-600 transition-colors w-full p-1 justify-center rounded-lg hover:bg-gray-50">
                                                                     {expandedCustomEvent === ce.id ? <Icons.ChevronUp className="w-4 h-4" /> : <Icons.ChevronDown className="w-4 h-4" />}
-                                                                    参加状況を確認する（予定: {attendees.length}名）
+                                                                    参加状況を確認する（回答済: {totalAnswered}名）
                                                                 </button>
                                                                 {expandedCustomEvent === ce.id && (
                                                                     <div className="mt-2 p-3 bg-gray-50 rounded-xl border border-gray-100 text-xs space-y-3">
-                                                                        <div>
-                                                                            <span className="font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-md mr-2">参加 {attendees.length}名</span>
-                                                                            <span className="text-gray-600 font-medium">{attendees.join(', ') || 'なし'}</span>
-                                                                        </div>
-                                                                        <div>
-                                                                            <span className="font-bold text-gray-700 bg-gray-200 px-2 py-1 rounded-md mr-2">不参加 {absentees.length}名</span>
-                                                                            <span className="text-gray-500 font-medium">{absentees.join(', ') || 'なし'}</span>
-                                                                        </div>
+                                                                        {opts.map(opt => {
+                                                                            const optMembers = Object.keys(users).filter(uid => users[uid] && users[uid].role === 'user' && (eventAttendance[uid]?.[ce.id]?.status === opt)).map(uid => users[uid].name);
+                                                                            return (
+                                                                                <div key={opt}>
+                                                                                    <span className="font-bold text-gray-700 bg-gray-200 px-2 py-1 rounded-md mr-2">{opt} {optMembers.length}名</span>
+                                                                                    <span className="text-gray-600 font-medium">{optMembers.join(', ') || 'なし'}</span>
+                                                                                </div>
+                                                                            );
+                                                                        })}
                                                                     </div>
                                                                 )}
                                                             </div>
                                                         )}
 
                                                         {activeTab === 'admin_events' && (
-                                                            <div className="mt-4 border-t pt-3 text-sm grid grid-cols-2 gap-3">
-                                                                <div className="bg-amber-50 p-3 rounded-xl border border-amber-100">
-                                                                    <div className="font-bold text-amber-800 border-b border-amber-200 pb-1.5 mb-2">参加: {attendees.length}名</div>
-                                                                    <div className="text-xs text-gray-700 leading-relaxed">{attendees.join(', ') || '-'}</div>
-                                                                </div>
-                                                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                                                                    <div className="font-bold text-gray-700 border-b border-gray-200 pb-1.5 mb-2">不参加: {absentees.length}名</div>
-                                                                    <div className="text-xs text-gray-500 leading-relaxed">{absentees.join(', ') || '-'}</div>
-                                                                </div>
+                                                            <div className="mt-4 border-t pt-3 text-sm grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                                {opts.map(opt => {
+                                                                    const optMembers = Object.keys(users).filter(uid => users[uid] && users[uid].role === 'user' && (eventAttendance[uid]?.[ce.id]?.status === opt)).map(uid => users[uid].name);
+                                                                    return (
+                                                                        <div key={opt} className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                                                                            <div className="font-bold text-gray-700 border-b border-gray-200 pb-1.5 mb-2">{opt}: {optMembers.length}名</div>
+                                                                            <div className="text-xs text-gray-600 leading-relaxed">{optMembers.join(', ') || '-'}</div>
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         )}
                                                     </div>
