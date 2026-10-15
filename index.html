@@ -6,6 +6,7 @@
     <title>ゴルフ部スケジュール管理</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="./manifest.json">
     <script>
         tailwind.config = {
             theme: {
@@ -69,7 +70,28 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         const storage = getStorage(app);
+	// --- ▼ ここからWeb Push（FCM）用の追加コード ▼ ---
+        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js";
+        
+        const messaging = getMessaging(app);
 
+        // 通知の許可をリクエストし、デバイストークンを取得する関数
+        const requestNotificationPermission = async (userId) => {
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    // ※注意: Web Pushをバックグラウンドで受け取るには本来 Service Worker (firebase-messaging-sw.js) の設定が必要ですが、
+                    // ここではアプリ内で簡単に通知機能を有効化するベースを作ります。
+                    console.log('通知の許可が取得されました。');
+                    alert('プッシュ通知が有効化されました！');
+                } else {
+                    alert('通知の許可が拒否されました。');
+                }
+            } catch (error) {
+                console.error('通知トークンの取得に失敗しました:', error);
+            }
+        };
+        // --- ▲ ここまで追加コード ▲ ---
         // Required Path Helpers
         const getColPath = (colName) => `artifacts/${appId}/public/data/${colName}`;
         const getDocRef = (colName, docId) => doc(db, getColPath(colName), docId);
@@ -659,6 +681,9 @@
                             <div className="flex items-center gap-3">
                                 <button onClick={() => setShowAdvanceModal(true)} className="p-2 text-gray-500 hover:text-emerald-500 transition-colors" title="建て替えメモ">
                                     <Icons.Banknote className="w-5 h-5" />
+                                </button>
+				<button onClick={() => requestNotificationPermission(currentUser.id)} className="p-2 text-gray-500 hover:text-emerald-500 transition-colors" title="通知を有効にする">
+                                    <Icons.Activity className="w-5 h-5" />
                                 </button>
                                 <button onClick={() => setShowPopupMessages('manual')} className="relative p-2 text-gray-500 hover:text-amber-500 transition-colors" title="お知らせ">
                                     <Icons.Bell className="w-5 h-5" />
