@@ -1,0 +1,16 @@
+{
+  "name": "ゴルフ部スケジュール管理",
+  "short_name": "ゴルフ部",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "https://www.vecteezy.com/vector-art/15206759-golf-club-icon-flat-style",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
