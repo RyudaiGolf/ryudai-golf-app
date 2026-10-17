@@ -196,7 +196,7 @@
         };
 
         const App = () => {
-           const { currentMonthStr, displayMonths, votingMonths, prev1MonthStr, prev2NodeStr, nextMonthStr } = useMemo(() => {
+           const { currentMonthStr, displayMonths, votingMonths, prev1MonthStr, prev2MonthStr, nextMonthStr } = useMemo(() => {
                 const now = new Date();
                 const getStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                 const cur = getStr(now);
