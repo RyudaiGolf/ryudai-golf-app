@@ -334,6 +334,17 @@
                 setupFirebase();
             }, []);
 
+	// アプリ起動時にService Workerを登録するコード
+	    useEffect(() => {
+    		if ('serviceWorker' in navigator) {
+        		window.addEventListener('load', () => {
+            			navigator.serviceWorker.register('./firebase-messaging-sw.js')
+                			.then(reg => console.log('Service Worker 登録成功:', reg))
+                			.catch(err => console.log('Service Worker 登録失敗:', err));
+        		});
+    		}
+	    }, []);
+
             useEffect(() => {
                 if (!isFirebaseReady) return;
 
