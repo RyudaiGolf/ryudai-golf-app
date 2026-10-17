@@ -75,17 +75,23 @@
         
         const messaging = getMessaging(app);
 
-        // 通知の許可をリクエストし、デバイストークンを取得する関数
+	// 通知の許可をリクエストし、デバイストークンを取得する関数
         const requestNotificationPermission = async (userId) => {
             try {
+                // すでに許可されているかの事前チェックを追加
+                if (Notification.permission === 'granted') {
+                    alert('すでにプッシュ通知は有効化されています！');
+                    return;
+                }
+
                 const permission = await Notification.requestPermission();
                 if (permission === 'granted') {
-                    // ※注意: Web Pushをバックグラウンドで受け取るには本来 Service Worker (firebase-messaging-sw.js) の設定が必要ですが、
-                    // ここではアプリ内で簡単に通知機能を有効化するベースを作ります。
                     console.log('通知の許可が取得されました。');
                     alert('プッシュ通知が有効化されました！');
+                } else if (permission === 'denied') {
+                    alert('通知の許可が拒否されました。アプリ，または使用中のブラウザの設定から許可に変更してください。');
                 } else {
-                    alert('通知の許可が拒否されました。');
+                    alert('通知の許可が選択されませんでした。');
                 }
             } catch (error) {
                 console.error('通知トークンの取得に失敗しました:', error);
