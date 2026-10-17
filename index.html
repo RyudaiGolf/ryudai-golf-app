@@ -89,7 +89,7 @@
                     console.log('通知の許可が取得されました。');
                     alert('プッシュ通知が有効化されました！');
                 } else if (permission === 'denied') {
-                    alert('通知の許可が拒否されました。アプリ，または使用中のブラウザの設定から許可に変更してください。');
+                    alert('通知の許可が拒否されました。ブラウザの設定から許可に変更してください。');
                 } else {
                     alert('通知の許可が選択されませんでした。');
                 }
@@ -196,7 +196,7 @@
         };
 
         const App = () => {
-            const { currentMonthStr, displayMonths, votingMonths, prev1MonthStr, prev2MonthStr, nextMonthStr } = useMemo(() => {
+           const { currentMonthStr, displayMonths, votingMonths, prev1MonthStr, prev2NodeStr, nextMonthStr } = useMemo(() => {
                 const now = new Date();
                 const getStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                 const cur = getStr(now);
@@ -208,7 +208,7 @@
                     nextMonthStr: nxt,
                     prev1MonthStr: p1,
                     prev2MonthStr: p2,
-                    displayMonths: [p2, p1, cur, nxt],
+                    displayMonths: [nxt, cur, p1, p2], // ▼ ここを新しい順（降順）に変更
                     votingMonths: [cur, nxt]
                 };
             }, []);
@@ -243,7 +243,7 @@
             const [showPopupMessages, setShowPopupMessages] = useState(false);
             const [showAdvanceModal, setShowAdvanceModal] = useState(false);
             const [hasSeenPopup, setHasSeenPopup] = useState(false);
-            const [expandedMonths, setExpandedMonths] = useState({ [prev2MonthStr]: false, [prev1MonthStr]: false, [currentMonthStr]: true, [nextMonthStr]: false });
+            const [expandedMonths, setExpandedMonths] = useState({ [nextMonthStr]: false, [currentMonthStr]: true, [prev1MonthStr]: false, [prev2MonthStr]: false });
             const [expandedEvent, setExpandedEvent] = useState(null);
             const [expandedCustomEvent, setExpandedCustomEvent] = useState(null);
             const [isDailyAttExpanded, setIsDailyAttExpanded] = useState(false);
