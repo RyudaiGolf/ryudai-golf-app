@@ -338,12 +338,30 @@
                 setupFirebase();
             }, []);
 
-	// アプリ起動時にService Workerを登録するコード
+		// アプリ起動時にService Workerを登録し、更新を検知するコード
 	    useEffect(() => {
     		if ('serviceWorker' in navigator) {
         		window.addEventListener('load', () => {
             			navigator.serviceWorker.register('./firebase-messaging-sw.js')
-                			.then(reg => console.log('Service Worker 登録成功:', reg))
+                			.then(reg => {
+                    				console.log('Service Worker 登録成功:', reg);
+                    
+                    				// 新しいバージョンがないかチェックする
+                    				reg.onupdatefound = () => {
+                        				const installingWorker = reg.installing;
+                        				if (installingWorker) {
+                            					installingWorker.onstatechange = () => {
+                                					if (installingWorker.state === 'installed') {
+                                    						if (navigator.serviceWorker.controller) {
+                                        						// 新しいアップデートがある場合
+                                        						console.log('新しいアップデートがあります。再読み込みします。');
+                                        						window.location.reload();
+                                    						}
+                                					}
+                            					};
+                        				}
+                    				};
+                			})
                 			.catch(err => console.log('Service Worker 登録失敗:', err));
         		});
     		}
