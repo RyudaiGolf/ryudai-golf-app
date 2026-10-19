@@ -7,8 +7,8 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="./manifest.json">
-	<link rel="apple-touch-icon" href="./icon.png">
-	<link rel="icon" href="./icon.png">
+    <link rel="apple-touch-icon" href="./icon.png">
+    <link rel="icon" href="./icon.png">
     <script>
         tailwind.config = {
             theme: {
@@ -72,23 +72,18 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         const storage = getStorage(app);
-	// --- ▼ ここからWeb Push（FCM）用の追加コード ▼ ---
+
         import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-messaging.js";
-        
         const messaging = getMessaging(app);
 
-	// 通知の許可をリクエストし、デバイストークンを取得する関数
         const requestNotificationPermission = async (userId) => {
             try {
-                // すでに許可されているかの事前チェックを追加
                 if (Notification.permission === 'granted') {
                     alert('すでにプッシュ通知は有効化されています！');
                     return;
                 }
-
                 const permission = await Notification.requestPermission();
                 if (permission === 'granted') {
-                    console.log('通知の許可が取得されました。');
                     alert('プッシュ通知が有効化されました！');
                 } else if (permission === 'denied') {
                     alert('通知の許可が拒否されました。ブラウザの設定から許可に変更してください。');
@@ -99,8 +94,7 @@
                 console.error('通知トークンの取得に失敗しました:', error);
             }
         };
-        // --- ▲ ここまで追加コード ▲ ---
-        // Required Path Helpers
+
         const getColPath = (colName) => `artifacts/${appId}/public/data/${colName}`;
         const getDocRef = (colName, docId) => doc(db, getColPath(colName), docId);
         const getColRef = (colName) => collection(db, getColPath(colName));
@@ -129,7 +123,8 @@
             Edit2: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>,
             Settings: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
             Send: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>,
-            BarChart2: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            BarChart2: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>,
+            MessageSquare: ({className}) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
         };
 
         const DEFAULT_DAY_TYPES = [
@@ -149,9 +144,7 @@
         const generateEvents = (dTypes) => {
             const events = [];
             const now = new Date();
-            // 現在の2ヶ月前の1日
             const startMonthDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            // 来月の末日
             const endMonthDate = new Date(now.getFullYear(), now.getMonth() + 2, 0); 
 
             let currentDate = startMonthDate;
@@ -159,7 +152,6 @@
             
             while (currentDate <= endDate) {
                 const dayOfWeek = currentDate.getDay();
-                // タイムゾーンによるズレを防ぐための対応
                 const yyyy = currentDate.getFullYear();
                 const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
                 const dd = String(currentDate.getDate()).padStart(2, '0');
@@ -198,7 +190,7 @@
         };
 
         const App = () => {
-           const { currentMonthStr, displayMonths, votingMonths, prev1MonthStr, prev2MonthStr, nextMonthStr } = useMemo(() => {
+            const { currentMonthStr, displayMonths, votingMonths, prev1MonthStr, prev2MonthStr, nextMonthStr } = useMemo(() => {
                 const now = new Date();
                 const getStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                 const cur = getStr(now);
@@ -210,18 +202,17 @@
                     nextMonthStr: nxt,
                     prev1MonthStr: p1,
                     prev2MonthStr: p2,
-                    displayMonths: [nxt, cur, p1, p2], // ▼ ここを新しい順（降順）に変更
+                    displayMonths: [nxt, cur, p1, p2],
                     votingMonths: [cur, nxt]
                 };
             }, []);
 
             const [isFirebaseReady, setIsFirebaseReady] = useState(false);
             const [firebaseError, setFirebaseError] = useState('');
-            // localStorageから前回のログイン情報を復元する（なければnull）
-	    const [currentUser, setCurrentUser] = useState(() => {
-    		const savedUser = localStorage.getItem('golf_current_user');
-    		return savedUser ? JSON.parse(savedUser) : null;
-	    });
+            const [currentUser, setCurrentUser] = useState(() => {
+                const savedUser = localStorage.getItem('golf_current_user');
+                return savedUser ? JSON.parse(savedUser) : null;
+            });
             const [activeTab, setActiveTab] = useState('events'); 
             const [loginId, setLoginId] = useState('');
             const [loginPass, setLoginPass] = useState('');
@@ -239,6 +230,7 @@
             const [dayTypes, setDayTypes] = useState(DEFAULT_DAY_TYPES);
             const [scheduleEvents, setScheduleEvents] = useState([]);
             const [advances, setAdvances] = useState([]);
+            const [boardPosts, setBoardPosts] = useState([]); // 掲示板用ステート
 
             // UI States
             const [showLoginMessages, setShowLoginMessages] = useState(false);
@@ -250,6 +242,9 @@
             const [expandedCustomEvent, setExpandedCustomEvent] = useState(null);
             const [isDailyAttExpanded, setIsDailyAttExpanded] = useState(false);
             const [isMonthlyStatsExpanded, setIsMonthlyStatsExpanded] = useState(false);
+
+            // 掲示板新規投稿用ステート
+            const [newPostContent, setNewPostContent] = useState('');
 
             // Advance edit state
             const [editingAdvanceId, setEditingAdvanceId] = useState(null);
@@ -328,7 +323,6 @@
                             return;
                         }
 
-                        // Initial check for Admin user
                         const adminDocRef = getDocRef('users', 'カントク');
                         const adminDoc = await getDoc(adminDocRef);
                         
@@ -346,34 +340,28 @@
                 setupFirebase();
             }, []);
 
-		// アプリ起動時にService Workerを登録し、更新を検知するコード
-	    useEffect(() => {
-    		if ('serviceWorker' in navigator) {
-        		window.addEventListener('load', () => {
-            			navigator.serviceWorker.register('./firebase-messaging-sw.js')
-                			.then(reg => {
-                    				console.log('Service Worker 登録成功:', reg);
-                    
-                    				// 新しいバージョンがないかチェックする
-                    				reg.onupdatefound = () => {
-                        				const installingWorker = reg.installing;
-                        				if (installingWorker) {
-                            					installingWorker.onstatechange = () => {
-                                					if (installingWorker.state === 'installed') {
-                                    						if (navigator.serviceWorker.controller) {
-                                        						// 新しいアップデートがある場合
-                                        						console.log('新しいアップデートがあります。再読み込みします。');
-                                        						window.location.reload();
-                                    						}
-                                					}
-                            					};
-                        				}
-                    				};
-                			})
-                			.catch(err => console.log('Service Worker 登録失敗:', err));
-        		});
-    		}
-	    }, []);
+            useEffect(() => {
+                if ('serviceWorker' in navigator) {
+                    window.addEventListener('load', () => {
+                        navigator.serviceWorker.register('./firebase-messaging-sw.js')
+                            .then(reg => {
+                                reg.onupdatefound = () => {
+                                    const installingWorker = reg.installing;
+                                    if (installingWorker) {
+                                        installingWorker.onstatechange = () => {
+                                            if (installingWorker.state === 'installed') {
+                                                if (navigator.serviceWorker.controller) {
+                                                    window.location.reload();
+                                                }
+                                            }
+                                        };
+                                    }
+                                };
+                            })
+                            .catch(err => console.log('Service Worker 登録失敗:', err));
+                    });
+                }
+            }, []);
 
             useEffect(() => {
                 if (!isFirebaseReady) return;
@@ -381,7 +369,6 @@
                 const unsubs = [];
                 const errHandler = (err) => console.error("Snapshot error:", err);
 
-                // Settings
                 unsubs.push(onSnapshot(getDocRef('settings', 'dayTypes'), (docSnap) => {
                     if (docSnap.exists()) {
                         setDayTypes(docSnap.data().list || DEFAULT_DAY_TYPES);
@@ -390,7 +377,6 @@
                     }
                 }, errHandler));
 
-                // Read all data regardless of login status (for login messages)
                 unsubs.push(onSnapshot(getColRef('messages'), (snap) => {
                     const d = []; snap.forEach(doc => d.push(doc.data())); setMessages(d.sort((a,b)=>b.id.localeCompare(a.id)));
                 }, errHandler));
@@ -399,7 +385,6 @@
                     const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setUsers(d);
                 }, errHandler));
 
-                // If user is logged in, listen to the rest of the app data
                 if (currentUser) {
                     unsubs.push(onSnapshot(getColRef('attendance'), (snap) => {
                         const d = {}; snap.forEach(doc => d[doc.id] = doc.data()); setAttendance(d);
@@ -421,6 +406,22 @@
                     }, errHandler));
                     unsubs.push(onSnapshot(getColRef('advances'), (snap) => {
                         const d = []; snap.forEach(doc => d.push(doc.data())); setAdvances(d.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)));
+                    }, errHandler));
+                    
+                    // 掲示板データの取得（1ヶ月以内の投稿のみをフィルタリング）
+                    unsubs.push(onSnapshot(getColRef('board'), (snap) => {
+                        const posts = [];
+                        const now = new Date();
+                        const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+
+                        snap.forEach(doc => {
+                            const data = doc.data();
+                            const postDate = new Date(data.createdAt);
+                            if (postDate >= oneMonthAgo) {
+                                posts.push(data);
+                            }
+                        });
+                        setBoardPosts(posts.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
                     }, errHandler));
                 }
 
@@ -452,7 +453,7 @@
                 const user = users[normalizedId];
                 if (user && user.password === loginPass) {
                     setCurrentUser(user);
-		    localStorage.setItem('golf_current_user', JSON.stringify(user));
+                    localStorage.setItem('golf_current_user', JSON.stringify(user));
                     setActiveTab(user.role === 'admin' ? 'admin_data' : 'events');
                     
                     if (user.role !== 'admin') {
@@ -516,6 +517,23 @@
                 if (!auth.currentUser) return;
                 const ref = getDocRef('event_attendance', currentUser.id);
                 await setDoc(ref, { [eventId]: { status } }, { merge: true });
+            };
+
+            // 掲示板投稿処理
+            const handleCreatePost = async (e) => {
+                e.preventDefault();
+                if (!auth.currentUser || !newPostContent.trim()) return;
+
+                const postId = `post_${Date.now()}`;
+                await setDoc(getDocRef('board', postId), {
+                    id: postId,
+                    userId: currentUser.id,
+                    userName: currentUser.name,
+                    content: newPostContent,
+                    createdAt: new Date().toISOString()
+                });
+
+                setNewPostContent('');
             };
 
             const handleRecordPractice = async (e) => {
@@ -637,14 +655,6 @@
                             <div className="bg-red-50 p-3 rounded-lg text-sm text-red-800 font-mono break-all border border-red-100 mb-4">
                                 {firebaseError}
                             </div>
-                            <div className="text-sm text-gray-600 space-y-2">
-                                <p className="font-bold">【考えられる原因と対処法】</p>
-                                <ul className="list-disc pl-5 space-y-1 text-xs">
-                                    <li>Firebase Consoleの「Authentication」で<strong>「匿名(Anonymous)」プロバイダが有効になっていない</strong>。</li>
-                                    <li>Firebase Consoleの「Authentication &gt; 設定 &gt; 承認済みドメイン」に、<strong>実際のサイトのURL(ドメイン)が追加されていない</strong>。</li>
-                                    <li>Firestoreのセキュリティルールでアクセスが拒否されている。</li>
-                                </ul>
-                            </div>
                         </div>
                     </div>
                 );
@@ -724,8 +734,8 @@
                                 <button onClick={() => setShowAdvanceModal(true)} className="p-2 text-gray-500 hover:text-emerald-500 transition-colors" title="建て替えメモ">
                                     <Icons.Banknote className="w-5 h-5" />
                                 </button>
-				<button onClick={() => requestNotificationPermission(currentUser.id)} className="p-2 text-gray-500 hover:text-emerald-500 transition-colors" title="通知を有効にする">
-                                    <Icons.Send className="w-5 h-5" />
+                                <button onClick={() => requestNotificationPermission(currentUser.id)} className="p-2 text-gray-500 hover:text-emerald-500 transition-colors" title="通知を有効にする">
+                                    <Icons.Bell className="w-5 h-5" />
                                 </button>
                                 <button onClick={() => setShowPopupMessages('manual')} className="relative p-2 text-gray-500 hover:text-amber-500 transition-colors" title="お知らせ">
                                     <Icons.Bell className="w-5 h-5" />
@@ -735,10 +745,10 @@
                                     <Icons.UserCircle className="w-4 h-4 text-emerald-600" /> {currentUser.name}
                                 </div>
                                 <button onClick={() => {
-					setCurrentUser(null); 
-					setHasSeenPopup(false);
-					localStorage.removeItem('golf_current_user');
-				}} className="text-gray-500 hover:text-red-500 p-1" title="ログアウト"><Icons.LogOut className="w-5 h-5" /></button>
+                                    setCurrentUser(null); 
+                                    setHasSeenPopup(false);
+                                    localStorage.removeItem('golf_current_user');
+                                }} className="text-gray-500 hover:text-red-500 p-1" title="ログアウト"><Icons.LogOut className="w-5 h-5" /></button>
                             </div>
                         </div>
                     </header>
@@ -778,13 +788,78 @@
                                 </>
                             ) : (
                                 <>
-                                    <button onClick={() => setActiveTab('events')} className={`flex-1 min-w-[90px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${activeTab === 'events' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Star className="w-4 h-4" />イベント</button>
-                                    <button onClick={() => setActiveTab('attendance')} className={`flex-1 min-w-[80px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${activeTab === 'attendance' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Calendar className="w-4 h-4" />出欠</button>
-                                    <button onClick={() => setActiveTab('voting')} className={`flex-1 min-w-[90px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all relative ${activeTab === 'voting' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Vote className="w-4 h-4" />義務日</button>
-                                    <button onClick={() => setActiveTab('practice')} className={`flex-1 min-w-[80px] py-2.5 px-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all ${activeTab === 'practice' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Activity className="w-4 h-4" />自主練</button>
+                                    <button onClick={() => setActiveTab('events')} className={`flex-1 min-w-[70px] py-2.5 px-1 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all ${activeTab === 'events' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Star className="w-4 h-4" />イベント</button>
+                                    <button onClick={() => setActiveTab('attendance')} className={`flex-1 min-w-[65px] py-2.5 px-1 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all ${activeTab === 'attendance' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Calendar className="w-4 h-4" />出欠</button>
+                                    <button onClick={() => setActiveTab('voting')} className={`flex-1 min-w-[70px] py-2.5 px-1 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all relative ${activeTab === 'voting' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Vote className="w-4 h-4" />義務日</button>
+                                    <button onClick={() => setActiveTab('practice')} className={`flex-1 min-w-[65px] py-2.5 px-1 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all ${activeTab === 'practice' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.Activity className="w-4 h-4" />自主練</button>
+                                    <button onClick={() => setActiveTab('board')} className={`flex-1 min-w-[70px] py-2.5 px-1 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all ${activeTab === 'board' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Icons.MessageSquare className="w-4 h-4" />掲示板</button>
                                 </>
                             )}
                         </div>
+
+                        {/* 掲示板タブの中身 */}
+                        {activeTab === 'board' && (
+                            <div className="space-y-6">
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                                    <h2 className="text-lg font-bold text-emerald-800 mb-2 flex items-center gap-2 border-b pb-2">
+                                        <Icons.MessageSquare className="w-5 h-5" /> 部員掲示板
+                                    </h2>
+                                    <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                                        部員同士の連絡や質問にご利用ください。※投稿は約1ヶ月で自動的に非表示になります。
+                                    </p>
+                                    <form onSubmit={handleCreatePost} className="space-y-4">
+                                        <textarea
+                                            placeholder="メッセージを入力してください..."
+                                            required
+                                            rows="3"
+                                            value={newPostContent}
+                                            onChange={e => setNewPostContent(e.target.value)}
+                                            className="w-full p-3 border border-gray-300 rounded-xl bg-gray-50 resize-none focus:ring-2 focus:ring-emerald-500 outline-none transition text-sm"
+                                        />
+                                        <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-md">
+                                            投稿する
+                                        </button>
+                                    </form>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                                    <h3 className="font-bold text-gray-800 mb-4 border-b pb-2 flex items-center gap-2">
+                                        <Icons.Clock className="w-5 h-5 text-gray-500" /> 投稿一覧（直近1ヶ月以内）
+                                    </h3>
+                                    <div className="space-y-4">
+                                        {boardPosts.length === 0 ? (
+                                            <p className="text-sm text-gray-500 text-center py-6 bg-gray-50 rounded-xl">現在、投稿はありません。</p>
+                                        ) : (
+                                            boardPosts.map(post => (
+                                                <div key={post.id} className="p-4 bg-gray-50 border border-gray-100 rounded-xl space-y-2">
+                                                    <div className="flex justify-between items-center text-xs text-gray-500 font-bold border-b border-gray-200 pb-1.5">
+                                                        <span className="text-emerald-800 flex items-center gap-1">
+                                                            <Icons.UserCircle className="w-4 h-4 text-emerald-600" /> {post.userName}
+                                                        </span>
+                                                        <span>{new Date(post.createdAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+                                                    {(currentUser.role === 'admin' || currentUser.id === post.userId) && (
+                                                        <div className="text-right pt-1">
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (auth.currentUser && confirm('この投稿を削除しますか？')) {
+                                                                        await deleteDoc(getDocRef('board', post.id));
+                                                                    }
+                                                                }}
+                                                                className="text-xs text-red-400 hover:text-red-600 font-bold"
+                                                            >
+                                                                削除する
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {(activeTab === 'events' || activeTab === 'admin_events') && (
                             <div className="space-y-6">
@@ -952,7 +1027,7 @@
                             <div className="space-y-6">
                                 {displayMonths.map(monthStr => {
                                     const mEvents = eventsByMonth[monthStr] || [];
-                                    if (mEvents.length === 0) return null; // イベントが無い月は非表示
+                                    if (mEvents.length === 0) return null;
 
                                     const hasVoted = !!votes[currentUser.id]?.[monthStr];
                                     const isLocked = votingMonths.includes(monthStr) && !hasVoted;
@@ -1331,7 +1406,7 @@
                                 </div>
 
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                                    <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2"><Icons.Settings className="w-6 h-6 text-gray-600" />定期練習日の追加・編集</h2>
+                                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Icons.Settings className="w-6 h-6 text-gray-600" />定期練習日の追加・編集</h2>
                                     <p className="text-xs text-gray-500 mb-4 leading-relaxed">部活の日程が変わった際や新しい枠を作る際にここで追加・削除してください。追加した枠は自動でカレンダーに反映されます。</p>
                                     <form onSubmit={async(e)=>{
                                         e.preventDefault();
